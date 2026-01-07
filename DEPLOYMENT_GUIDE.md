@@ -1164,6 +1164,43 @@ TENCENT_SECRET_ID=your_tencent_secret_id
 TENCENT_SECRET_KEY=your_tencent_secret_key
 ```
 
+#### 邮件服务配置（必需，用于发送 OTP 验证码）
+
+```
+# 方式1: 使用 Gmail（推荐）
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+
+# 方式2: 使用 QQ 邮箱
+EMAIL_USER=your-email@qq.com
+EMAIL_PASS=your-authorization-code
+EMAIL_HOST=smtp.qq.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+
+# 方式3: 使用自定义 SMTP 服务器
+EMAIL_USER=your-email@example.com
+EMAIL_PASS=your-password
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+
+# 或者使用别名（兼容性）
+SMTP_USER=your-email@example.com
+SMTP_PASS=your-password
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+```
+
+**⚠️ 重要提示**:
+- **Gmail**: 需要使用"应用专用密码"而不是普通密码。获取方式：Google 账号 → 安全性 → 两步验证 → 应用专用密码
+- **QQ 邮箱**: 需要在 QQ 邮箱设置中开启 SMTP 服务并获取授权码
+- **其他邮箱**: 请参考邮箱服务商的 SMTP 配置文档
+- 如果不配置邮件服务，生产环境将无法发送 OTP 验证码
+
 #### 服务器配置
 
 ```

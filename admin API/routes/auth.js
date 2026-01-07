@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const AV = require('leancloud-storage');
+const { sendOTPEmail, testEmailService } = require('../utils/email');
 
 const router = express.Router();
 
@@ -23,7 +24,8 @@ router.post('/test-email', [
     console.log(`📧 测试邮件发送到: ${email}`);
 
     try {
-      await AV.User.requestEmailVerify(email);
+      // 优先使用 nodemailer 发送测试邮件
+      await testEmailService(email);
       console.log(`✅ 测试邮件发送成功: ${email}`);
 
       res.json({
@@ -37,11 +39,22 @@ router.post('/test-email', [
         stack: emailError.stack
       });
 
-      res.status(500).json({
-        success: false,
-        message: `邮件服务错误: ${emailError.message}`,
-        details: '请检查LeanCloud控制台的邮件配置'
-      });
+      // 如果 nodemailer 失败，尝试使用 LeanCloud 邮件服务（备用方案）
+      try {
+        await AV.User.requestEmailVerify(email);
+        console.log(`✅ LeanCloud邮件服务测试成功: ${email}`);
+
+        res.json({
+          success: true,
+          message: 'Test email sent successfully via LeanCloud. Please check your inbox and spam folder.'
+        });
+      } catch (leancloudError) {
+        res.status(500).json({
+          success: false,
+          message: `邮件服务错误: ${emailError.message}`,
+          details: '请检查邮件服务配置（EMAIL_USER 和 EMAIL_PASS）或 LeanCloud 控制台的邮件配置'
+        });
+      }
     }
   } catch (error) {
     console.error('Test email error:', error);
@@ -114,16 +127,13 @@ router.post('/send-otp', [
 
     // 生产环境：发送包含OTP的邮件
     try {
-      // TODO: 集成实际的邮件服务
-      // 当前版本只在开发模式下工作
-      console.log(`📧 生产环境OTP邮件需要配置: ${email} -> 验证码: ${otp}`);
+      await sendOTPEmail(email, otp);
+      
+      console.log(`✅ OTP邮件发送成功: ${email}`);
 
-      // 清除缓存的OTP（因为无法发送邮件）
-      otpCache.delete(email);
-
-      return res.status(500).json({
-        success: false,
-        message: '生产环境邮件服务未配置，请使用开发模式或联系管理员'
+      return res.json({
+        success: true,
+        message: 'OTP verification code has been sent to your email. Please check your inbox and spam folder.'
       });
     } catch (emailError) {
       console.error(`❌ 邮件服务错误:`, emailError);
@@ -131,9 +141,19 @@ router.post('/send-otp', [
       // 清除缓存的OTP
       otpCache.delete(email);
 
+      // 检查是否是配置问题
+      if (emailError.message.includes('未配置') || emailError.message.includes('not configured')) {
+        return res.status(500).json({
+          success: false,
+          message: '生产环境邮件服务未配置，请使用开发模式或联系管理员',
+          details: '请配置 EMAIL_USER 和 EMAIL_PASS 环境变量'
+        });
+      }
+
       return res.status(500).json({
         success: false,
-        message: '邮件服务暂时不可用，请稍后再试'
+        message: '邮件服务暂时不可用，请稍后再试',
+        details: emailError.message
       });
     }
 
