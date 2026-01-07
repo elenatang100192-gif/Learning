@@ -35,9 +35,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // 添加时间戳确保每次构建文件名不同
-        entryFileNames: 'assets/[name]-[hash]-[Date.now()].js',
-        chunkFileNames: 'assets/[name]-[hash]-[Date.now()].js',
-        assetFileNames: 'assets/[name]-[hash]-[Date.now()].[ext]'
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     }
   },
