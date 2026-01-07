@@ -95,7 +95,7 @@
    EMAIL_SECURE=false
    ```
 
-#### 方式 3: 使用 163 邮箱
+#### 方式 3: 使用 163 邮箱（推荐，国内用户）
 
 **配置步骤**：
 
@@ -105,25 +105,31 @@
    - 开启 **POP3/SMTP服务** 或 **IMAP/SMTP服务**
    - 点击 **客户端授权密码** → **开启**
    - 设置授权密码并保存
+   - **注意**：如果使用普通密码，可能需要先开启授权码功能
 
 2. **在 CloudBase Run 中配置环境变量**：
 
    | 变量名 | 变量值 | 说明 |
    |--------|--------|------|
-   | `EMAIL_USER` | `your-email@163.com` | 你的 163 邮箱地址 |
-   | `EMAIL_PASS` | `your-authorization-code` | 163 邮箱授权码 |
+   | `EMAIL_USER` | `elenatang1001@163.com` | 你的 163 邮箱地址 |
+   | `EMAIL_PASS` | `TANGlin1001` | 163 邮箱密码或授权码 |
    | `EMAIL_HOST` | `smtp.163.com` | 163 邮箱 SMTP 服务器 |
    | `EMAIL_PORT` | `465` | SMTP 端口（163使用465） |
    | `EMAIL_SECURE` | `true` | 是否使用 SSL（465端口使用true） |
 
-   **示例**：
+   **实际配置示例**：
    ```
-   EMAIL_USER=yourname@163.com
-   EMAIL_PASS=your-auth-code
+   EMAIL_USER=elenatang1001@163.com
+   EMAIL_PASS=TANGlin1001
    EMAIL_HOST=smtp.163.com
    EMAIL_PORT=465
    EMAIL_SECURE=true
    ```
+
+   **⚠️ 重要提示**：
+   - 如果使用普通密码无法发送邮件，请使用授权码
+   - 163 邮箱必须使用 465 端口和 SSL 加密
+   - 确保已在 163 邮箱设置中开启 SMTP 服务
 
 #### 方式 4: 使用自定义 SMTP 服务器
 
@@ -275,12 +281,14 @@ EMAIL_SECURE=false
 ### 完整配置示例（163 邮箱）
 
 ```bash
-EMAIL_USER=yourname@163.com
-EMAIL_PASS=your-auth-code
+EMAIL_USER=elenatang1001@163.com
+EMAIL_PASS=TANGlin1001
 EMAIL_HOST=smtp.163.com
 EMAIL_PORT=465
 EMAIL_SECURE=true
 ```
+
+**注意**：如果使用普通密码无法发送邮件，请使用 163 邮箱的授权码替代密码。
 
 ---
 

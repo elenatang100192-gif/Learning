@@ -1183,7 +1183,14 @@ EMAIL_HOST=smtp.qq.com
 EMAIL_PORT=587
 EMAIL_SECURE=false
 
-# 方式3: 使用自定义 SMTP 服务器
+# 方式3: 使用 163 邮箱（推荐，国内用户）
+EMAIL_USER=elenatang1001@163.com
+EMAIL_PASS=TANGlin1001
+EMAIL_HOST=smtp.163.com
+EMAIL_PORT=465
+EMAIL_SECURE=true
+
+# 方式4: 使用自定义 SMTP 服务器
 EMAIL_USER=your-email@example.com
 EMAIL_PASS=your-password
 EMAIL_HOST=smtp.example.com
