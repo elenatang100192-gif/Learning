@@ -73,7 +73,27 @@ npm install -g netlify-cli
 
 ## 部署前端应用
 
-### 步骤 1: 创建 Netlify 站点
+### 方案选择
+
+**方案 A: Netlify（国外服务，推荐用于海外用户）**
+- ✅ 配置简单，自动化程度高
+- ✅ 免费额度充足
+- ⚠️ 国内访问可能较慢
+
+**方案 B: 腾讯云静态网站托管（国内服务，推荐用于国内用户）**
+- ✅ 国内访问速度快
+- ✅ 与腾讯云托管后端在同一平台，管理方便
+- ✅ 支持 Git 自动部署
+- ✅ 有免费额度
+- ✅ 与后端服务集成方便
+
+**本指南同时提供两种方案的部署步骤。**
+
+---
+
+### 方案 A: 使用 Netlify 部署前端应用
+
+#### 步骤 1: 创建 Netlify 站点
 
 1. 登录 Netlify Dashboard
 2. 点击 "Add new site" → "Import an existing project"
@@ -505,6 +525,170 @@ VITE_API_BASE_URL=https://your-backend-api.railway.app/api
 
 ---
 
+### 方案 B: 使用腾讯云静态网站托管部署前端和后台管理界面（推荐，国内服务）
+
+腾讯云静态网站托管（CloudBase Hosting）是腾讯云提供的静态网站托管服务，类似于 Netlify，但更适合国内用户。
+
+#### 优势
+
+- ✅ **国内访问速度快**：服务器在国内，访问速度比 Netlify 快
+- ✅ **与后端集成方便**：与腾讯云托管后端在同一平台，管理更方便
+- ✅ **Git 自动部署**：支持 GitHub/GitLab 自动部署
+- ✅ **免费额度**：有免费额度，适合小型项目
+- ✅ **HTTPS 自动配置**：自动配置 SSL 证书
+- ✅ **CDN 加速**：自动配置 CDN，提升访问速度
+
+#### 部署前端应用
+
+**步骤 1: 开通静态网站托管**
+
+1. 登录腾讯云控制台
+2. 进入云开发控制台（与后端部署使用同一个环境）
+3. 点击左侧菜单 "静态网站托管"
+4. 点击 "开通静态网站托管"
+5. 等待开通完成（通常几秒钟）
+
+**步骤 2: 创建前端应用站点**
+
+1. 在静态网站托管页面，点击 "新建站点"
+2. 填写站点信息：
+   - **站点名称**: `frontend`（自定义）
+   - **站点描述**: `视频应用前端界面`（可选）
+
+**步骤 3: 配置 Git 仓库**
+
+1. 在站点配置页面，找到 "Git 仓库" 部分
+2. 点击 "授权 GitHub"（如果还没有授权）
+   - 会跳转到 GitHub 授权页面
+   - 点击 "Authorize" 授权
+   - 授权成功后返回配置页面
+3. 选择仓库：
+   - **仓库**: 选择 `elenatang100192-gif/Learning`
+   - **分支**: 选择 `main`
+4. **启用自动部署**: 打开开关（推荐）
+   - 这样每次推送到 `main` 分支时，会自动触发部署
+
+**步骤 4: 配置构建设置**
+
+**项目框架说明**:
+- **前端框架**: React 18 + TypeScript
+- **构建工具**: Vite 6.x
+- **样式框架**: Tailwind CSS 4.x
+- **UI组件库**: Radix UI + shadcn/ui
+- **项目类型**: 单页应用（SPA - Single Page Application）
+
+**配置步骤**:
+
+1. **代码目录**: 输入 `frontend`
+   - 这是代码仓库中前端代码所在的目录
+   - CloudBase 会在这个目录下查找 `package.json` 和构建文件
+
+2. **构建命令**: 输入 `npm install && npm run build`
+   - `npm install`: 安装项目依赖（React、Vite、Tailwind CSS 等）
+   - `npm run build`: 执行 Vite 构建命令，将 React + TypeScript 代码编译打包
+   - 构建完成后会在 `dist` 目录生成静态文件（HTML、CSS、JS）
+
+3. **输出目录**: 输入 `dist`
+   - Vite 构建后的输出目录
+   - 包含 `index.html` 和所有静态资源文件
+   - CloudBase 会将此目录中的文件部署到 CDN
+
+**步骤 5: 配置环境变量**
+
+1. 展开 "环境变量" 部分
+2. 点击 "添加环境变量"
+3. 添加以下环境变量（从 `SENSITIVE_INFO.md` 获取实际值）：
+
+```
+VITE_LEANCLOUD_APP_ID=RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz
+VITE_LEANCLOUD_APP_KEY=1w0cQLBZIaJ32tjaU7RkDu3n
+VITE_LEANCLOUD_SERVER_URL=https://rdecdltb.lc-cn-n1-shared.com
+VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
+```
+
+**⚠️ 重要**: `VITE_API_BASE_URL` 需要替换为你的腾讯云托管后端地址（格式：`https://your-service-id.region.app.tcloudbase.com/api`）
+
+**步骤 6: 部署站点**
+
+1. 检查所有配置是否正确
+2. 点击 "提交" 或 "部署"
+3. CloudBase 会自动：
+   - 从 GitHub 拉取代码
+   - 安装依赖
+   - 执行构建命令
+   - 部署到 CDN
+4. 等待部署完成（通常需要 2-3 分钟）
+
+**步骤 7: 获取访问地址**
+
+1. 部署完成后，在站点列表中点击你的站点
+2. 在站点详情页面，找到 "访问地址"
+3. 复制访问地址，格式类似：`https://frontend-xxx.tcloudbaseapp.com`
+4. 这就是你的前端应用地址
+
+#### 部署后台管理界面
+
+**⚠️ 重要提示**: 
+- **静态网站托管只能部署前端静态文件**（HTML、CSS、JS）
+- **后端 API 必须使用云托管（CloudBase Run）部署**，不能使用静态网站托管
+- 如果你看到这个错误，说明你误将后端部署到了静态网站托管
+
+**正确的部署方式**:
+- ✅ **前端应用** → 静态网站托管
+- ✅ **后台管理界面** → 静态网站托管  
+- ✅ **后端 API** → 云托管（CloudBase Run）
+
+**步骤 1: 创建后台管理站点**
+
+1. 在静态网站托管页面，点击 "新建站点"
+2. 填写站点信息：
+   - **站点名称**: `admin`（自定义）
+   - **站点描述**: `视频应用后台管理界面`（可选）
+
+**步骤 2-7: 配置步骤与前端应用相同**
+
+**项目框架说明**（与前端应用相同）:
+- **前端框架**: React 18 + TypeScript
+- **构建工具**: Vite 6.x
+- **样式框架**: Tailwind CSS 4.x
+- **UI组件库**: Radix UI + shadcn/ui
+- **项目类型**: 单页应用（SPA - Single Page Application）
+
+**配置步骤**:
+
+- **代码目录**: `admin`
+  - 这是代码仓库中后台管理代码所在的目录
+- **构建命令**: `npm install && npm run build`
+  - 安装依赖并执行 Vite 构建
+- **输出目录**: `dist`
+  - Vite 构建后的输出目录
+- **环境变量**: 与前端应用相同（包括 `VITE_API_BASE_URL`）
+
+**步骤 8: 获取访问地址**
+
+部署完成后，获取后台管理的访问地址，格式类似：`https://admin-xxx.tcloudbaseapp.com`
+
+#### 配置自定义域名（可选）
+
+1. 在站点详情页面，点击 "自定义域名"
+2. 添加你的域名（如：`app.yourdomain.com`）
+3. 按照提示配置 DNS 记录
+4. 等待 SSL 证书自动配置完成（通常几分钟）
+
+#### 费用说明
+
+- **免费额度**：
+  - 存储空间：5GB
+  - 流量：5GB/月
+  - 请求次数：100万次/月
+- **超出后按量付费**，价格较低
+
+#### 文档
+
+- 腾讯云静态网站托管文档：https://cloud.tencent.com/document/product/1210
+
+---
+
 ## 配置后端 API
 
 Netlify 支持通过 Netlify Functions 部署 Node.js 后端，但你的后端使用了 `fluent-ffmpeg`、`canvas`、`pdfjs-dist` 等需要系统依赖的包，这些在 Netlify Functions 环境中可能无法运行。
@@ -531,7 +715,7 @@ Netlify 支持通过 Netlify Functions 部署 Node.js 后端，但你的后端�
 
 由于你的后端需要 FFmpeg 等系统依赖，建议使用以下服务：
 
-#### 选项 1: Railway（推荐）
+#### 选项 1: Railway（推荐，国外服务）
 
 1. 访问 [https://railway.app](https://railway.app)
 2. 使用 GitHub 登录
@@ -543,51 +727,353 @@ Netlify 支持通过 Netlify Functions 部署 Node.js 后端，但你的后端�
 
 **重要**: 由于使用单一仓库，Railway 需要知道后端代码在哪个子目录，所以必须设置 Root Directory 为 `admin API`。
 
-#### 选项 2: Render
+**⚠️ 注意**: Railway 是国外服务，在中国大陆访问可能较慢或不稳定。
 
-1. 访问 [https://render.com](https://render.com)
-2. 注册账号
-3. 点击 "New" → "Web Service"
-4. 连接 GitHub 仓库（选择包含所有代码的仓库）
-5. 配置：
-   - **Name**: `video-app-api`
-   - **Root Directory**: `admin API`
-   - **Build Command**: `npm install`
-   - **Start Command**: `node server.js`
-   - **Environment**: `Node`
-   - **Node Version**: `18` 或 `20`
+#### 选项 1A: 阿里云 Serverless 应用引擎 SAE（推荐，国内服务）
 
-#### 选项 3: Heroku
+**优势**:
+- ✅ 国内服务，访问速度快
+- ✅ 支持 Docker 容器，可以安装 FFmpeg 等系统依赖
+- ✅ 按量付费，成本可控
+- ✅ 支持 Git 代码部署
 
-1. 访问 [https://www.heroku.com](https://www.heroku.com)
-2. 注册账号
-3. 安装 Heroku CLI
-4. 在 `admin API` 目录下创建 `Procfile`：
+**部署步骤**:
 
+1. **注册阿里云账号**
+   - 访问 [https://www.aliyun.com](https://www.aliyun.com)
+   - 注册并完成实名认证
+
+2. **开通 SAE 服务**
+   - 进入阿里云控制台
+   - 搜索 "Serverless 应用引擎 SAE"
+   - 开通服务（首次使用有免费额度）
+
+3. **创建应用**
+   - 点击 "创建应用"
+   - 选择 "镜像部署" 或 "代码部署"
+   - **应用名称**: `video-app-backend`
+   - **技术栈**: Node.js
+   - **运行环境**: Node.js 18
+
+4. **配置代码仓库**
+   - 选择 "代码仓库部署"
+   - 连接 GitHub/GitLab 仓库
+   - **代码目录**: `admin API`
+   - **构建命令**: `npm install`
+   - **启动命令**: `node server.js`
+
+5. **配置环境变量**
+   - 在应用配置中添加所有环境变量（见下方环境变量配置部分）
+
+6. **配置 FFmpeg**
+   - 在 Dockerfile 中添加 FFmpeg 安装命令：
+   ```dockerfile
+   FROM node:18
+   RUN apt-get update && apt-get install -y ffmpeg
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm install
+   COPY . .
+   CMD ["node", "server.js"]
+   ```
+
+**文档**: https://help.aliyun.com/product/97792.html
+
+#### 选项 1B: 腾讯云云开发 CloudBase（推荐，国内服务）
+
+**优势**:
+- ✅ 国内服务，访问速度快
+- ✅ 支持 Node.js 云函数
+- ✅ 与腾讯云其他服务集成方便
+- ✅ 有免费额度
+
+**部署步骤**:
+
+#### 详细配置步骤
+
+**步骤 1: 注册腾讯云账号**
+1. 访问 [https://cloud.tencent.com](https://cloud.tencent.com)
+2. 点击 "免费注册"
+3. 完成注册并完成实名认证（必需）
+
+**步骤 2: 开通云开发服务**
+1. 登录腾讯云控制台
+2. 在顶部搜索框输入 "云开发 CloudBase"
+3. 点击进入云开发控制台
+4. 点击 "新建环境"
+5. 填写环境信息：
+   - **环境名称**: `video-app-env`（自定义）
+   - **环境类型**: 选择 "云托管"（CloudBase Run）
+   - **地域**: 选择离你最近的地域（如：广州、上海）
+6. 点击 "立即开通"
+
+**步骤 3: 创建云托管服务**
+1. 在云开发控制台中，点击左侧菜单 "云托管"
+2. 点击 "新建服务"
+3. 填写服务信息：
+   - **服务名称**: `video-app-backend`（只能包含数字、小写字母和 `-`，不能以 `-` 开头或结尾）
+   - **服务描述**: `视频应用后端 API 服务`（可选）
+
+**步骤 4: 配置 Git 仓库连接**
+1. 在服务配置页面，找到 "Git 仓库" 部分
+2. 点击 "授权 GitHub"（如果还没有授权）
+   - 会跳转到 GitHub 授权页面
+   - 点击 "Authorize" 授权
+   - 授权成功后返回配置页面
+3. 选择仓库：
+   - **仓库**: 选择 `elenatang100192-gif/Learning`
+   - **分支**: 选择 `main`
+4. **启用自动部署**: 打开开关（推荐）
+   - 这样每次推送到 `main` 分支时，会自动触发部署
+
+**步骤 5: 配置服务端口**
+1. 展开 "服务端口设置" 部分
+2. 配置端口映射：
+   - **访问端口**: `80`（CloudBase 对外暴露的端口，固定为 80）
+   - **服务端口**: `3001`（你的 Node.js 应用监听的端口，与 `server.js` 中的 `PORT` 一致）
+   - ⚠️ **重要**: 服务端口必须与你的应用监听端口一致（`server.js` 中默认是 3001）
+
+**步骤 6: 配置构建设置**
+1. 展开 "构建设置" 部分
+2. **目标目录**: 输入 `admin API`
+   - 这是代码仓库中后端代码所在的目录
+   - CloudBase 会在这个目录下查找 Dockerfile
+3. **Dockerfile 文件**: 选择 "有"
+4. **Dockerfile 名称**: 输入 `Dockerfile`
+   - 确保 `admin API` 目录下有 `Dockerfile` 文件（见下方创建 Dockerfile）
+
+**步骤 7: 创建 Dockerfile**
+在 `admin API` 目录下创建 `Dockerfile` 文件（如果还没有）：
+
+```dockerfile
+# 使用 Node.js 18 官方镜像作为基础镜像
+FROM node:18
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖（包括 FFmpeg）
+RUN apt-get update && \
+    apt-get install -y \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制 package.json 和 package-lock.json
+COPY package*.json ./
+
+# 安装 Node.js 依赖
+RUN npm install --production
+
+# 复制应用代码
+COPY . .
+
+# 暴露端口（CloudBase 会自动映射，这里设置为 3001）
+EXPOSE 3001
+
+# 启动应用
+CMD ["node", "server.js"]
 ```
-web: node server.js
+
+**步骤 8: 配置环境变量**
+1. 展开 "环境变量设置" 部分
+2. 点击 "添加环境变量"
+3. 逐个添加以下环境变量（从 `SENSITIVE_INFO.md` 获取实际值）：
+
+**LeanCloud 配置**:
+```
+LEANCLOUD_APP_ID=RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz
+LEANCLOUD_APP_KEY=1w0cQLBZIaJ32tjaU7RkDu3n
+LEANCLOUD_MASTER_KEY=Ub2GDZGGNo0NuUOvDRheK04Y
+LEANCLOUD_SERVER_URL=https://rdecdltb.lc-cn-n1-shared.com
 ```
 
-5. 部署（由于使用单一仓库，需要指定子目录）：
-
-```bash
-# 方法1: 使用 git subtree（推荐）
-cd /Users/et/Desktop/Learning
-git subtree push --prefix "admin API" heroku main
-
-# 方法2: 使用 git subtree 强制推送（如果遇到冲突）
-git push heroku `git subtree split --prefix "admin API" main`:main --force
+**API Keys 配置**:
+```
+DEEPSEEK_API_KEY=sk-c3a8c2ddc6dc49c4b6f43b3394147ead
+DASHSCOPE_API_KEY=sk-7d830956ecb642349f40833295dfd04c
+ARK_API_KEY=866a3f1e-a011-4f07-a5a8-01cd771f8552
+DOUBAO_MODEL_ID=doubao-seedance-1-5-pro-251215
+DOUBAO_TTS_APP_ID=7616870473
+DOUBAO_TTS_ACCESS_KEY=q8Fx7NRJOVxrl6486XjBKaTL4gqVwqXm
+DOUBAO_TTS_SECRET_KEY=d9ryy2RnuxT5wGmmA4EteU24fVRjcYSb
+DOUBAO_TTS_RESOURCE_ID=seed-tts-1.0
 ```
 
-**注意**: Heroku 对单一仓库的支持不如 Railway 和 Render 方便，建议优先使用 Railway 或 Render。
+**阿里云 OSS 配置**（需要替换为你的实际值）:
+```
+OSS_REGION=oss-cn-hangzhou
+OSS_ACCESS_KEY_ID=你的AccessKey ID
+OSS_ACCESS_KEY_SECRET=你的AccessKey Secret
+OSS_BUCKET=knowledge-video-app
+```
 
----
+**腾讯云 TTS 配置**（需要替换为你的实际值）:
+```
+TENCENT_SECRET_ID=你的Secret ID
+TENCENT_SECRET_KEY=你的Secret Key
+```
+
+**服务器配置**（必需的环境变量）:
+```
+PORT=3001
+NODE_ENV=production
+FRONTEND_URL=https://your-frontend-app.netlify.app
+ADMIN_URL=https://your-admin-app.netlify.app
+```
+
+**⚠️ 重要提示**:
+- ✅ **是的，这些都需要配置在环境变量中**（在 CloudBase 控制台的环境变量设置中添加）
+- 对于包含密钥的环境变量，建议在 CloudBase 控制台中将它们标记为 "敏感信息"（如果支持）
+
+**各环境变量说明**:
+
+1. **`PORT=3001`**
+   - **用途**: 指定后端服务监听的端口号
+   - **代码使用**: `server.js` 中 `const PORT = process.env.PORT || 3001;`
+   - **必须与 CloudBase 的"服务端口"配置一致**（步骤 5 中配置的 3001）
+   - ⚠️ **重要**: 如果修改了端口，需要同时修改 CloudBase 的服务端口配置
+
+2. **`NODE_ENV=production`**
+   - **用途**: 标识当前为生产环境
+   - **代码使用**: 用于 CORS 配置，允许所有 `.netlify.app` 域名的请求（如果设置了）
+   - **建议**: 始终设置为 `production`，确保生产环境的安全配置生效
+
+3. **`FRONTEND_URL=https://your-frontend-app.netlify.app`**
+   - **用途**: 前端应用的访问地址，用于 CORS 配置
+   - **代码使用**: `server.js` 中添加到允许的源列表
+   - **需要替换为**: 
+     - 如果使用 Netlify：你的 Netlify 前端地址（如：`https://your-frontend-app.netlify.app`）
+     - 如果使用腾讯云静态网站托管：你的 CloudBase 前端地址（如：`https://frontend-xxx.tcloudbaseapp.com`）
+
+4. **`ADMIN_URL=https://your-admin-app.netlify.app`**
+   - **用途**: 后台管理界面的访问地址，用于 CORS 配置
+   - **代码使用**: `server.js` 中添加到允许的源列表
+   - **需要替换为**: 
+     - 如果使用 Netlify：你的 Netlify 后台管理地址（如：`https://your-admin-app.netlify.app`）
+     - 如果使用腾讯云静态网站托管：你的 CloudBase 后台管理地址（如：`https://admin-xxx.tcloudbaseapp.com`）
+
+**配置示例**（根据你的实际部署地址）:
+
+如果使用腾讯云静态网站托管：
+```
+PORT=3001
+NODE_ENV=production
+FRONTEND_URL=https://frontend-xxx.tcloudbaseapp.com
+ADMIN_URL=https://admin-xxx.tcloudbaseapp.com
+```
+
+如果使用 Netlify：
+```
+PORT=3001
+NODE_ENV=production
+FRONTEND_URL=https://your-frontend-app.netlify.app
+ADMIN_URL=https://your-admin-app.netlify.app
+```
+
+**步骤 9: 配置更多设置（可选）**
+1. 展开 "更多配置" 部分
+2. **实例规格**: 选择适合的规格（建议：0.25核 0.5GB，免费额度内）
+3. **最小实例数**: `1`（保持至少 1 个实例运行）
+4. **最大实例数**: `2`（根据流量自动扩容）
+
+**步骤 10: 部署服务**
+1. 检查所有配置是否正确
+2. 点击 "提交" 或 "创建服务"
+3. CloudBase 会自动：
+   - 从 GitHub 拉取代码
+   - 在 `admin API` 目录下构建 Docker 镜像
+   - 安装依赖并启动服务
+4. 等待部署完成（通常需要 3-5 分钟）
+
+**步骤 11: 获取服务地址**
+1. 部署完成后，在服务列表中点击你的服务
+2. 在服务详情页面，找到 "访问地址"
+3. 复制访问地址，格式类似：`https://your-service-id.region.app.tcloudbase.com`
+4. 这个地址就是你的后端 API 地址，用于配置前端的 `VITE_API_BASE_URL`
+
+**步骤 12: 更新前端环境变量**
+在 Netlify 中更新前端应用的环境变量：
+```
+VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
+```
+
+**文档**: https://cloud.tencent.com/document/product/876
+
+#### 选项 1C: 阿里云 ECS（弹性计算服务，国内服务）
+
+**优势**:
+- ✅ 完全控制服务器，可以安装任何依赖
+- ✅ 国内访问速度快
+- ✅ 适合长期运行的服务
+
+**部署步骤**:
+
+1. **购买 ECS 实例**
+   - 访问 [https://ecs.console.aliyun.com](https://ecs.console.aliyun.com)
+   - 选择配置（建议：2核4G，Ubuntu 20.04）
+   - 购买并启动实例
+
+2. **连接服务器**
+   ```bash
+   ssh root@your-server-ip
+   ```
+
+3. **安装 Node.js 和 FFmpeg**
+   ```bash
+   # 安装 Node.js 18
+   curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+   apt-get install -y nodejs
+   
+   # 安装 FFmpeg
+   apt-get update
+   apt-get install -y ffmpeg
+   ```
+
+4. **部署代码**
+   ```bash
+   # 克隆仓库
+   git clone https://github.com/elenatang100192-gif/Learning.git
+   cd Learning/admin\ API
+   
+   # 安装依赖
+   npm install
+   
+   # 配置环境变量（创建 .env 文件）
+   nano .env
+   # 粘贴所有环境变量
+   
+   # 使用 PM2 管理进程
+   npm install -g pm2
+   pm2 start server.js --name video-app-backend
+   pm2 save
+   pm2 startup
+   ```
+
+5. **配置防火墙**
+   - 在阿里云控制台开放端口 3001（或你配置的端口）
+
+**文档**: https://help.aliyun.com/product/25365.html
+
+#### 选项 1D: 腾讯云轻量应用服务器（国内服务）
+
+**优势**:
+- ✅ 价格便宜，适合小型项目
+- ✅ 国内访问速度快
+- ✅ 预装常用软件
+
+**部署步骤**:
+
+与阿里云 ECS 类似，购买轻量应用服务器后按照相同步骤部署。
+
+**文档**: https://cloud.tencent.com/document/product/1207
+
+#
 
 ## 配置环境变量
 
 ### 后端环境变量
 
-在后端托管服务（Railway/Render/Heroku）中配置以下环境变量：
+在后端托管服务（Railway/Render/Heroku/阿里云 SAE/腾讯云 CloudBase/阿里云 ECS）中配置以下环境变量：
 
 #### LeanCloud 配置
 

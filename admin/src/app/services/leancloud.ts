@@ -385,28 +385,6 @@ export const bookAPI = {
       createdAt: book.createdAt
     } as Book;
   },
-
-  // 获取书籍详情
-  async getById(id: string) {
-    initLeanCloud();
-    const book = await new AV.Query('Book').get(id);
-    query.include('category');
-    return {
-      id: book.id,
-      title: book.get('title'),
-      author: book.get('author'),
-      isbn: book.get('isbn'),
-      category: book.get('category') ? {
-        id: book.get('category').id,
-        name: book.get('category').get('name'),
-        nameCn: book.get('category').get('nameCn'),
-        sortOrder: book.get('category').get('sortOrder')
-      } : undefined,
-      coverUrl: book.get('coverUrl'),
-      fileUrl: book.get('fileUrl'),
-      uploadDate: book.get('uploadDate'),
-      status: book.get('status'),
-      createdAt: book.createdAt
     } as Book;
   },
 
