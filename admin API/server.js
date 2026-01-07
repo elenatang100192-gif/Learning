@@ -48,12 +48,20 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      // 在生产环境中，可以允许所有Netlify域名
-      if (process.env.NODE_ENV === 'production' && origin && origin.includes('.netlify.app')) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      // 在生产环境中，允许所有Netlify域名和CloudBase静态网站托管域名
+      if (process.env.NODE_ENV === 'production' && origin) {
+        if (origin.includes('.netlify.app') || origin.includes('.tcloudbaseapp.com')) {
+          callback(null, true);
+          return;
+        }
       }
+      // 开发环境也允许CloudBase域名（用于测试）
+      if (origin && origin.includes('.tcloudbaseapp.com')) {
+        callback(null, true);
+        return;
+      }
+      console.warn(`⚠️ CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
