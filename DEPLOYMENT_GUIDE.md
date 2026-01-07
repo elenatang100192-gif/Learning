@@ -909,7 +909,9 @@ CMD ["node", "server.js"]
 **步骤 8: 配置环境变量**
 1. 展开 "环境变量设置" 部分
 2. 点击 "添加环境变量"
-3. 逐个添加以下环境变量（从 `SENSITIVE_INFO.md` 获取实际值）：
+3. 逐个添加以下环境变量（从 `SENSITIVE_INFO.md` 获取实际值）
+
+**📧 邮件服务配置（详细步骤请参考 `EMAIL_CONFIGURATION_GUIDE.md`）**：
 
 **LeanCloud 配置**:
 ```
