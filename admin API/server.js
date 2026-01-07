@@ -109,6 +109,29 @@ app.use('/api/books', bookRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/follows', followRoutes);
 
+// 根路径处理
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Video App Backend API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      videos: '/api/videos',
+      books: '/api/books',
+      categories: '/api/categories',
+      users: '/api/users',
+      upload: '/api/upload',
+      likes: '/api/likes',
+      favorites: '/api/favorites',
+      comments: '/api/comments',
+      follows: '/api/follows'
+    },
+    documentation: 'See /api/health for server status'
+  });
+});
+
 // 健康检查
 app.get('/api/health', (req, res) => {
   res.json({

@@ -1020,14 +1020,26 @@ ADMIN_URL=https://your-admin-app.netlify.app
 **步骤 11: 获取服务地址**
 1. 部署完成后，在服务列表中点击你的服务
 2. 在服务详情页面，找到 "访问地址"
-3. 复制访问地址，格式类似：`https://your-service-id.region.app.tcloudbase.com`
+3. 复制访问地址，格式类似：`https://your-service-id.region.app.tcloudbase.com` 或 `https://video-app-backend-xxx.sh.run.tcloudbase.com`
 4. 这个地址就是你的后端 API 地址，用于配置前端的 `VITE_API_BASE_URL`
 
+**⚠️ 重要提示**：
+- 后端 API 的所有路由都在 `/api` 前缀下
+- 正确的 API 访问路径格式：`https://your-service-id.region.app.tcloudbase.com/api/...`
+- 例如：
+  - 健康检查：`https://your-service-id.region.app.tcloudbase.com/api/health`
+  - 视频列表：`https://your-service-id.region.app.tcloudbase.com/api/videos`
+  - 书籍列表：`https://your-service-id.region.app.tcloudbase.com/api/books`
+
 **步骤 12: 更新前端环境变量**
-在 Netlify 中更新前端应用的环境变量：
+在 CloudBase 静态网站托管中更新前端应用和后台管理界面的环境变量：
 ```
 VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
 ```
+
+**注意**: 
+- `VITE_API_BASE_URL` 必须以 `/api` 结尾
+- 如果服务地址是 `https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com`，则 `VITE_API_BASE_URL` 应该是 `https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api`
 
 **文档**: https://cloud.tencent.com/document/product/876
 
