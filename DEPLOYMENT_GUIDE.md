@@ -623,7 +623,7 @@ VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
 
 1. 部署完成后，在站点列表中点击你的站点
 2. 在站点详情页面，找到 "访问地址"
-3. 复制访问地址，格式类似：`https://frontend-xxx.tcloudbaseapp.com` 或 `https://xxx.tcloudbaseapp.com/Video-frontend/`
+3. 复制访问地址，格式类似：`https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend/`
 4. 这就是你的前端应用地址
 
 **⚠️ 重要：如果部署在子路径下**
@@ -698,7 +698,7 @@ VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
 
 **步骤 8: 获取访问地址**
 
-部署完成后，获取后台管理的访问地址，格式类似：`https://admin-xxx.tcloudbaseapp.com`
+部署完成后，获取后台管理的访问地址，格式类似：`https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin/`
 
 #### 配置自定义域名（可选）
 
@@ -975,14 +975,14 @@ ADMIN_URL=https://your-admin-app.netlify.app
    - **代码使用**: `server.js` 中添加到允许的源列表
    - **需要替换为**: 
      - 如果使用 Netlify：你的 Netlify 前端地址（如：`https://your-frontend-app.netlify.app`）
-     - 如果使用腾讯云静态网站托管：你的 CloudBase 前端地址（如：`https://frontend-xxx.tcloudbaseapp.com`）
+     - 如果使用腾讯云静态网站托管：你的 CloudBase 前端地址（如：`https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend`）
 
 4. **`ADMIN_URL=https://your-admin-app.netlify.app`**
    - **用途**: 后台管理界面的访问地址，用于 CORS 配置
    - **代码使用**: `server.js` 中添加到允许的源列表
    - **需要替换为**: 
      - 如果使用 Netlify：你的 Netlify 后台管理地址（如：`https://your-admin-app.netlify.app`）
-     - 如果使用腾讯云静态网站托管：你的 CloudBase 后台管理地址（如：`https://admin-xxx.tcloudbaseapp.com`）
+     - 如果使用腾讯云静态网站托管：你的 CloudBase 后台管理地址（如：`https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin`）
 
 **配置示例**（根据你的实际部署地址）:
 
@@ -990,8 +990,8 @@ ADMIN_URL=https://your-admin-app.netlify.app
 ```
 PORT=3001
 NODE_ENV=production
-FRONTEND_URL=https://frontend-xxx.tcloudbaseapp.com
-ADMIN_URL=https://admin-xxx.tcloudbaseapp.com
+FRONTEND_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend
+ADMIN_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin
 ```
 
 如果使用 Netlify：
@@ -1169,11 +1169,11 @@ TENCENT_SECRET_KEY=your_tencent_secret_key
 ```
 PORT=3001
 NODE_ENV=production
-FRONTEND_URL=https://your-frontend-app.netlify.app
-ADMIN_URL=https://your-admin-app.netlify.app
+FRONTEND_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend
+ADMIN_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin
 ```
 
-**注意**: `FRONTEND_URL` 和 `ADMIN_URL` 用于 CORS 配置，确保前端和后台管理可以访问后端 API。如果不设置，后端会自动允许所有 `.netlify.app` 域名的请求。
+**注意**: `FRONTEND_URL` 和 `ADMIN_URL` 用于 CORS 配置，确保前端和后台管理可以访问后端 API。如果不设置，后端会自动允许所有 `.netlify.app` 和 `.tcloudbaseapp.com` 域名的请求。
 
 #### 服务器配置
 
@@ -1317,7 +1317,7 @@ node scripts/init-database.js
 
 ### 1. 验证前端应用
 
-1. 访问前端应用的 Netlify URL（如：`https://your-frontend-app.netlify.app`）
+1. 访问前端应用的 URL（如：`https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend/`）
 2. 检查：
    - ✅ 页面正常加载
    - ✅ 可以登录/注册
@@ -1326,7 +1326,7 @@ node scripts/init-database.js
 
 ### 2. 验证后台管理界面
 
-1. 访问后台管理的 Netlify URL（如：`https://your-admin-app.netlify.app`）
+1. 访问后台管理的 URL（如：`https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin/`）
 2. 检查：
    - ✅ 页面正常加载
    - ✅ 可以登录
