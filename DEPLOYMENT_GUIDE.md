@@ -101,29 +101,147 @@ frontend/dist
 
 ### 步骤 3: 配置环境变量
 
-在 Netlify Dashboard → Site settings → Environment variables 中添加：
+在 Netlify Dashboard → Site settings → Environment variables 中添加以下环境变量：
+
+#### 环境变量列表
+
+需要添加以下 4 个环境变量：
+
+1. **VITE_LEANCLOUD_APP_ID**
+2. **VITE_LEANCLOUD_APP_KEY**
+3. **VITE_LEANCLOUD_SERVER_URL**
+4. **VITE_API_BASE_URL**
+
+#### 详细填写步骤
+
+对于每个环境变量，按照以下步骤填写：
+
+**1. 点击 "Add a variable" 或 "New environment variable" 按钮**
+
+**2. 填写 Key（环境变量名称）**
+   - 在 **Key** 输入框中输入环境变量名称（例如：`VITE_LEANCLOUD_APP_ID`）
+   - 注意：不要包含 `=` 号，只输入变量名
+
+**3. 配置 Secret（敏感值）**
+   - ✅ **勾选** "Contains secret values" 复选框（对于包含密钥的环境变量）
+   - 需要勾选 Secret 的变量：
+     - `VITE_LEANCLOUD_APP_KEY`（包含密钥）
+     - `VITE_LEANCLOUD_APP_ID`（可选，建议勾选）
+   - 不需要勾选 Secret 的变量：
+     - `VITE_LEANCLOUD_SERVER_URL`（URL 地址，非敏感）
+     - `VITE_API_BASE_URL`（URL 地址，非敏感）
+
+**4. 选择 Scopes（作用域）**
+   - 选择 **"All scopes"**（默认选项）
+   - 这样环境变量会在所有部署上下文中可用（构建、函数、后处理等）
+
+**5. 填写 Values（值）**
+   - 选择 **"Same value for all deploy contexts"**（所有部署上下文使用相同值）
+   - 在输入框中输入对应的值（见下方实际值）
+
+**6. 点击 "Create variable" 按钮保存**
+
+#### 实际值（从 SENSITIVE_INFO.md 获取）
 
 ```
-VITE_LEANCLOUD_APP_ID=your_leancloud_app_id
-VITE_LEANCLOUD_APP_KEY=your_leancloud_app_key
-VITE_LEANCLOUD_SERVER_URL=your_leancloud_server_url
-VITE_API_BASE_URL=https://your-backend-api.netlify.app/api
+VITE_LEANCLOUD_APP_ID=RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz
+VITE_LEANCLOUD_APP_KEY=1w0cQLBZIaJ32tjaU7RkDu3n
+VITE_LEANCLOUD_SERVER_URL=https://rdecdltb.lc-cn-n1-shared.com
+VITE_API_BASE_URL=https://your-backend-api.railway.app/api
 ```
 
-**注意**: `VITE_API_BASE_URL` 应该指向你的后端 API 地址（如果后端也部署在 Netlify Functions，或者使用其他后端服务）
+**⚠️ 重要提示**:
+- `VITE_API_BASE_URL` 需要替换为你的实际后端 API 地址（如果使用 Railway，格式为：`https://your-app-name.railway.app/api`）
+- 如果后端部署在其他服务，请相应修改 URL
+- 所有包含密钥的环境变量都应该勾选 "Contains secret values"
 
-### 步骤 4: 修改前端 API 配置
+#### 填写示例
 
-编辑 `frontend/src/app/services/leancloud.ts`，确保 API 基础 URL 使用环境变量：
+**示例 1: VITE_LEANCLOUD_APP_ID**
+- **Key**: `VITE_LEANCLOUD_APP_ID`
+- **Contains secret values**: ✅ 勾选（建议）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz`
+
+**示例 2: VITE_LEANCLOUD_APP_KEY**
+- **Key**: `VITE_LEANCLOUD_APP_KEY`
+- **Contains secret values**: ✅ **必须勾选**（这是密钥）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `1w0cQLBZIaJ32tjaU7RkDu3n`
+
+**示例 3: VITE_LEANCLOUD_SERVER_URL**
+- **Key**: `VITE_LEANCLOUD_SERVER_URL`
+- **Contains secret values**: ❌ 不勾选（URL 地址）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `https://rdecdltb.lc-cn-n1-shared.com`
+
+**示例 4: VITE_API_BASE_URL**
+- **Key**: `VITE_API_BASE_URL`
+- **Contains secret values**: ❌ 不勾选（URL 地址）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `https://your-backend-api.railway.app/api`（替换为实际后端地址）
+
+**注意**: `VITE_API_BASE_URL` 应该指向你的后端 API 地址（如果后端部署在 Railway，格式为：`https://your-app-name.railway.app/api`）
+
+### 步骤 4: 验证前端 API 配置（已自动配置）
+
+**✅ 好消息**：前端代码已经配置好了环境变量支持，无需手动修改！
+
+前端文件 `frontend/src/app/services/leancloud.ts` 已经正确配置：
 
 ```typescript
-// 后端API配置（用于某些API调用）
+// 后端API配置（支持环境变量）
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 ```
 
+**说明**：
+- ✅ 代码已经使用 `import.meta.env.VITE_API_BASE_URL` 读取环境变量
+- ✅ 如果环境变量未设置，会使用默认值 `http://localhost:3001/api`（本地开发）
+- ✅ 部署到 Netlify 后，会自动使用你在 Netlify 中配置的 `VITE_API_BASE_URL` 环境变量
+
+**验证步骤**（可选）：
+1. 打开文件 `frontend/src/app/services/leancloud.ts`
+2. 确认第 2 行代码为：`const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';`
+3. 如果代码正确，则无需任何修改
+
+**⚠️ 重要提示**：
+- 确保在 Netlify 中正确配置了 `VITE_API_BASE_URL` 环境变量（步骤 3）
+- 环境变量的值应该是你的后端 API 地址，例如：`https://your-backend-api.railway.app/api`
+
 ### 步骤 5: 创建 `netlify.toml` 配置文件
 
-在 `frontend` 目录下创建 `netlify.toml`：
+`netlify.toml` 是 Netlify 的配置文件，用于告诉 Netlify 如何构建和部署你的应用。
+
+#### 为什么需要这个文件？
+
+虽然可以在 Netlify Dashboard 中手动配置构建设置，但使用 `netlify.toml` 文件有以下优势：
+- ✅ **版本控制**：配置随代码一起管理，团队成员都能看到
+- ✅ **一致性**：确保本地和部署环境使用相同的配置
+- ✅ **自动化**：每次部署自动应用配置，无需手动设置
+
+#### 操作步骤
+
+**1. 创建文件**
+
+在 `frontend` 目录下创建新文件 `netlify.toml`：
+
+**方法 A: 使用代码编辑器**
+- 在代码编辑器中打开 `frontend` 目录
+- 创建新文件，命名为 `netlify.toml`（注意：文件名必须完全一致，包括扩展名 `.toml`）
+
+**方法 B: 使用命令行**
+```bash
+cd /Users/et/Desktop/Learning/frontend
+touch netlify.toml
+```
+
+**2. 添加配置内容**
+
+将以下内容复制到 `netlify.toml` 文件中：
 
 ```toml
 [build]
@@ -138,6 +256,102 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001
 [build.environment]
   NODE_VERSION = "18"
 ```
+
+**3. 保存文件**
+
+保存文件后，确保文件位于 `frontend/netlify.toml`（与 `package.json` 同级目录）
+
+#### 配置项详细说明
+
+**1. `[build]` 部分 - 构建配置**
+
+```toml
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+```
+
+- **`command`**: 构建命令
+  - `npm install`: 安装依赖包
+  - `npm run build`: 执行构建（对应 `package.json` 中的 `build` 脚本）
+  - Netlify 会按顺序执行这些命令
+
+- **`publish`**: 发布目录
+  - `dist`: Vite 构建后的输出目录
+  - Netlify 会将此目录中的文件部署到 CDN
+
+**2. `[[redirects]]` 部分 - 路由重定向**
+
+```toml
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+- **作用**: 配置单页应用（SPA）的路由
+- **`from = "/*"`**: 匹配所有路径（`*` 是通配符）
+- **`to = "/index.html"`**: 重定向到 `index.html`
+- **`status = 200`**: HTTP 状态码 200（成功），而不是 301/302（重定向）
+  - 这样浏览器地址栏不会改变，用户体验更好
+  - 对于 React Router 等前端路由库是必需的
+
+**为什么需要这个？**
+- React 应用使用前端路由（如 `/home`, `/profile` 等）
+- 当用户直接访问这些 URL 时，服务器需要返回 `index.html`
+- 然后由 React Router 处理路由，显示正确的页面
+
+**3. `[build.environment]` 部分 - 构建环境变量**
+
+```toml
+[build.environment]
+  NODE_VERSION = "18"
+```
+
+- **作用**: 指定构建时使用的 Node.js 版本
+- **`NODE_VERSION = "18"`**: 使用 Node.js 18.x 版本
+- 确保构建环境与开发环境一致，避免版本差异导致的问题
+
+#### 验证配置
+
+创建文件后，可以通过以下方式验证：
+
+**1. 检查文件位置**
+```bash
+cd /Users/et/Desktop/Learning/frontend
+ls -la netlify.toml
+```
+
+**2. 检查文件内容**
+```bash
+cat netlify.toml
+```
+
+**3. 提交到 Git**
+```bash
+cd /Users/et/Desktop/Learning
+git add frontend/netlify.toml
+git commit -m "Add netlify.toml configuration for frontend"
+git push
+```
+
+#### 注意事项
+
+- ✅ 文件必须命名为 `netlify.toml`（小写，扩展名 `.toml`）
+- ✅ 文件必须放在 `frontend` 目录的根目录下（与 `package.json` 同级）
+- ✅ TOML 格式对缩进敏感，使用 2 个空格缩进
+- ✅ `[[redirects]]` 中的双括号 `[[ ]]` 表示数组，用于定义多个重定向规则
+
+#### 常见问题
+
+**Q: 如果我不创建这个文件会怎样？**
+A: Netlify 会使用默认配置，但可能无法正确处理前端路由。建议创建此文件以确保正确部署。
+
+**Q: 可以修改 `publish` 目录吗？**
+A: 可以，但需要确保与 `vite.config.ts` 中的 `build.outDir` 配置一致。默认情况下，Vite 输出到 `dist` 目录。
+
+**Q: Node 版本可以改为其他版本吗？**
+A: 可以，但建议使用 Node.js 18 或 20（LTS 版本）。确保与你的开发环境一致。
 
 ### 步骤 6: 部署
 
@@ -180,14 +394,91 @@ admin/dist
 
 ### 步骤 3: 配置环境变量
 
-在 Netlify Dashboard → Site settings → Environment variables 中添加：
+在 Netlify Dashboard → Site settings → Environment variables 中添加以下环境变量：
+
+#### 环境变量列表
+
+需要添加以下 4 个环境变量：
+
+1. **VITE_LEANCLOUD_APP_ID**
+2. **VITE_LEANCLOUD_APP_KEY**
+3. **VITE_LEANCLOUD_SERVER_URL**
+4. **VITE_API_BASE_URL**
+
+#### 详细填写步骤
+
+对于每个环境变量，按照以下步骤填写：
+
+**1. 点击 "Add a variable" 或 "New environment variable" 按钮**
+
+**2. 填写 Key（环境变量名称）**
+   - 在 **Key** 输入框中输入环境变量名称（例如：`VITE_LEANCLOUD_APP_ID`）
+   - 注意：不要包含 `=` 号，只输入变量名
+
+**3. 配置 Secret（敏感值）**
+   - ✅ **勾选** "Contains secret values" 复选框（对于包含密钥的环境变量）
+   - 需要勾选 Secret 的变量：
+     - `VITE_LEANCLOUD_APP_KEY`（包含密钥）
+     - `VITE_LEANCLOUD_APP_ID`（可选，建议勾选）
+   - 不需要勾选 Secret 的变量：
+     - `VITE_LEANCLOUD_SERVER_URL`（URL 地址，非敏感）
+     - `VITE_API_BASE_URL`（URL 地址，非敏感）
+
+**4. 选择 Scopes（作用域）**
+   - 选择 **"All scopes"**（默认选项）
+   - 这样环境变量会在所有部署上下文中可用（构建、函数、后处理等）
+
+**5. 填写 Values（值）**
+   - 选择 **"Same value for all deploy contexts"**（所有部署上下文使用相同值）
+   - 在输入框中输入对应的值（见下方实际值）
+
+**6. 点击 "Create variable" 按钮保存**
+
+#### 实际值（从 SENSITIVE_INFO.md 获取）
 
 ```
-VITE_LEANCLOUD_APP_ID=your_leancloud_app_id
-VITE_LEANCLOUD_APP_KEY=your_leancloud_app_key
-VITE_LEANCLOUD_SERVER_URL=your_leancloud_server_url
-VITE_API_BASE_URL=https://your-backend-api.netlify.app/api
+VITE_LEANCLOUD_APP_ID=RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz
+VITE_LEANCLOUD_APP_KEY=1w0cQLBZIaJ32tjaU7RkDu3n
+VITE_LEANCLOUD_SERVER_URL=https://rdecdltb.lc-cn-n1-shared.com
+VITE_API_BASE_URL=https://your-backend-api.railway.app/api
 ```
+
+**⚠️ 重要提示**:
+- `VITE_API_BASE_URL` 需要替换为你的实际后端 API 地址（如果使用 Railway，格式为：`https://your-app-name.railway.app/api`）
+- 如果后端部署在其他服务，请相应修改 URL
+- 所有包含密钥的环境变量都应该勾选 "Contains secret values"
+
+#### 填写示例
+
+**示例 1: VITE_LEANCLOUD_APP_ID**
+- **Key**: `VITE_LEANCLOUD_APP_ID`
+- **Contains secret values**: ✅ 勾选（建议）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz`
+
+**示例 2: VITE_LEANCLOUD_APP_KEY**
+- **Key**: `VITE_LEANCLOUD_APP_KEY`
+- **Contains secret values**: ✅ **必须勾选**（这是密钥）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `1w0cQLBZIaJ32tjaU7RkDu3n`
+
+**示例 3: VITE_LEANCLOUD_SERVER_URL**
+- **Key**: `VITE_LEANCLOUD_SERVER_URL`
+- **Contains secret values**: ❌ 不勾选（URL 地址）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `https://rdecdltb.lc-cn-n1-shared.com`
+
+**示例 4: VITE_API_BASE_URL**
+- **Key**: `VITE_API_BASE_URL`
+- **Contains secret values**: ❌ 不勾选（URL 地址）
+- **Scopes**: All scopes
+- **Values**: Same value for all deploy contexts
+- **Value**: `https://your-backend-api.railway.app/api`（替换为实际后端地址）
+
+**注意**: `VITE_API_BASE_URL` 应该指向你的后端 API 地址（如果后端部署在 Railway，格式为：`https://your-app-name.railway.app/api`）
 
 ### 步骤 4: 创建 `netlify.toml` 配置文件
 

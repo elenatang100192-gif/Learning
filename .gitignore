@@ -52,6 +52,9 @@ temp/
 # 部署信息（包含敏感 Token）
 deploy-info
 
+# 敏感信息记录文件
+SENSITIVE_INFO.md
+
 # 其他
 *.pid
 *.seed
