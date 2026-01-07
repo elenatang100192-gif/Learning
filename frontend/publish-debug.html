@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发布调试页面</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6">发布调试页面</h1>
+
+        <!-- 邮箱输入 -->
+        <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                邮箱地址
+            </label>
+            <input
+                type="email"
+                id="email"
+                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                placeholder="your-email@example.com"
+                value="elenatang1001@163.com"
+            >
+        </div>
+
+        <!-- 发送OTP按钮 -->
+        <button
+            id="sendOtpBtn"
+            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full mb-4"
+            onclick="sendOTP()"
+        >
+            1. 获取OTP
+        </button>
+
+        <!-- OTP输入 -->
+        <div id="otpSection" class="hidden mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="otp">
+                输入OTP验证码
+            </label>
+            <input
+                type="text"
+                id="otp"
+                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline text-center text-2xl tracking-widest font-mono"
+                maxlength="6"
+                placeholder="123456"
+            >
+        </div>
+
+        <!-- 登录按钮 -->
+        <button
+            id="loginBtn"
+            class="hidden bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full mb-4"
+            onclick="login()"
+        >
+            2. 登录获取Token
+        </button>
+
+        <!-- 发布按钮 -->
+        <button
+            id="publishBtn"
+            class="hidden bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded w-full mb-4"
+            onclick="publishVideo()"
+        >
+            3. 发布测试视频
+        </button>
+
+        <!-- 检查发布记录按钮 -->
+        <button
+            id="checkBtn"
+            class="hidden bg-orange-500 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded w-full mb-4"
+            onclick="checkPublications()"
+        >
+            4. 检查发布记录
+        </button>
+
+        <!-- 结果显示 -->
+        <div id="result" class="mt-4 text-center"></div>
+        <div id="debug" class="mt-4 p-4 bg-gray-100 rounded text-sm font-mono text-left max-h-60 overflow-y-auto"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3001/api';
+        let sessionToken = '';
+
+        function log(message) {
+            const debug = document.getElementById('debug');
+            const timestamp = new Date().toLocaleTimeString();
+            debug.innerHTML += `[${timestamp}] ${message}\n`;
+            debug.scrollTop = debug.scrollHeight;
+            console.log(message);
+        }
+
+        function showResult(message, isError = false) {
+            const result = document.getElementById('result');
+            result.innerHTML = `<span class="${isError ? 'text-red-500' : 'text-green-500'}">${message}</span>`;
+        }
+
+        async function sendOTP() {
+            const email = document.getElementById('email').value;
+            const btn = document.getElementById('sendOtpBtn');
+
+            if (!email) {
+                showResult('请输入邮箱地址', true);
+                return;
+            }
+
+            log(`📧 请求OTP: ${email}`);
+            btn.disabled = true;
+            btn.textContent = '发送中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+                log(`📨 OTP响应: ${JSON.stringify(data)}`);
+
+                if (data.success) {
+                    showResult('OTP发送成功！请查看控制台获取验证码');
+                    document.getElementById('otpSection').classList.remove('hidden');
+                    document.getElementById('loginBtn').classList.remove('hidden');
+                    log(`✅ 开发模式OTP: ${data.otp}`);
+                } else {
+                    showResult(`OTP发送失败: ${data.message}`, true);
+                }
+            } catch (error) {
+                showResult('OTP发送出错', true);
+                log(`❌ OTP错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '1. 获取OTP';
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const otp = document.getElementById('otp').value;
+            const btn = document.getElementById('loginBtn');
+
+            if (!otp || otp.length !== 6) {
+                showResult('请输入6位OTP验证码', true);
+                return;
+            }
+
+            log(`🔐 登录: ${email} with OTP: ${otp}`);
+            btn.disabled = true;
+            btn.textContent = '登录中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, otp })
+                });
+
+                const data = await response.json();
+                log(`🔑 登录响应: ${JSON.stringify(data, null, 2)}`);
+
+                if (data.success) {
+                    sessionToken = data.sessionToken;
+                    showResult('登录成功！');
+                    document.getElementById('publishBtn').classList.remove('hidden');
+                    document.getElementById('checkBtn').classList.remove('hidden');
+                    log(`🎫 Token: ${sessionToken}`);
+                } else {
+                    showResult(`登录失败: ${data.message}`, true);
+                }
+            } catch (error) {
+                showResult('登录出错', true);
+                log(`❌ 登录错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '2. 登录获取Token';
+            }
+        }
+
+        async function publishVideo() {
+            const btn = document.getElementById('publishBtn');
+
+            if (!sessionToken) {
+                showResult('请先登录获取token', true);
+                return;
+            }
+
+            const videoData = {
+                title: '前端调试测试视频',
+                titleEn: 'Frontend Debug Test Video',
+                categoryId: '6951ff1da54da130be8b068b',
+                videoUrl: 'https://example.com/debug-test.mp4',
+                coverUrl: 'https://example.com/debug-test.jpg',
+                duration: 45
+            };
+
+            log(`🎬 发布视频: ${JSON.stringify(videoData, null, 2)}`);
+            btn.disabled = true;
+            btn.textContent = '发布中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/videos/publish`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionToken}`
+                    },
+                    body: JSON.stringify(videoData)
+                });
+
+                const data = await response.json();
+                log(`📤 发布响应: ${JSON.stringify(data, null, 2)}`);
+
+                if (data.success) {
+                    showResult('视频发布成功！');
+                    log(`✅ 视频ID: ${data.data.id}`);
+                    log(`📊 视频状态: ${data.data.status}`);
+                } else {
+                    showResult(`发布失败: ${data.message}`, true);
+                }
+            } catch (error) {
+                showResult('发布出错', true);
+                log(`❌ 发布错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '3. 发布测试视频';
+            }
+        }
+
+        async function checkPublications() {
+            const btn = document.getElementById('checkBtn');
+
+            if (!sessionToken) {
+                showResult('请先登录获取token', true);
+                return;
+            }
+
+            log(`📋 检查发布记录`);
+            btn.disabled = true;
+            btn.textContent = '检查中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/users/publications?page=1&limit=20`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionToken}`
+                    }
+                });
+
+                const data = await response.json();
+                log(`📊 发布记录响应: ${JSON.stringify(data, null, 2)}`);
+
+                if (data.success) {
+                    const count = data.data.length;
+                    const titles = data.data.map(v => v.title).join(', ');
+                    showResult(`找到 ${count} 个视频: ${titles}`);
+                    log(`📝 视频列表: ${titles}`);
+                } else {
+                    showResult(`获取失败: ${data.message}`, true);
+                }
+            } catch (error) {
+                showResult('检查出错', true);
+                log(`❌ 检查错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '4. 检查发布记录';
+            }
+        }
+
+        // 回车键支持
+        document.getElementById('email').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendOTP();
+            }
+        });
+
+        document.getElementById('otp').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+    </script>
+</body>
+</html>

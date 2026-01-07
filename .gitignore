@@ -1,0 +1,59 @@
+# 环境变量文件（包含敏感信息）
+.env
+.env.local
+.env.*.local
+*.env
+
+# 依赖目录
+node_modules/
+**/node_modules/
+
+# 构建输出
+dist/
+build/
+**/dist/
+**/build/
+
+# 日志文件
+*.log
+logs/
+**/*.log
+server.log
+admin-dev.log
+frontend-dev.log
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 缓存文件
+.cache/
+**/.cache/
+.vite-cache/
+**/vite-cache/
+
+# 部署信息（包含敏感 Token）
+deploy-info
+
+# 其他
+*.pid
+*.seed
+*.pid.lock
+

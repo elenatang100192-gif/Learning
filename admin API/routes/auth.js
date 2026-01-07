@@ -1,0 +1,342 @@
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const AV = require('leancloud-storage');
+
+const router = express.Router();
+
+// 测试邮件服务
+router.post('/test-email', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format',
+        errors: errors.array()
+      });
+    }
+
+    const { email } = req.body;
+
+    console.log(`📧 测试邮件发送到: ${email}`);
+
+    try {
+      await AV.User.requestEmailVerify(email);
+      console.log(`✅ 测试邮件发送成功: ${email}`);
+
+      res.json({
+        success: true,
+        message: 'Test email sent successfully. Please check your inbox and spam folder.'
+      });
+    } catch (emailError) {
+      console.error(`❌ 邮件服务错误详情:`, {
+        email,
+        error: emailError.message,
+        stack: emailError.stack
+      });
+
+      res.status(500).json({
+        success: false,
+        message: `邮件服务错误: ${emailError.message}`,
+        details: '请检查LeanCloud控制台的邮件配置'
+      });
+    }
+  } catch (error) {
+    console.error('Test email error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test email service'
+    });
+  }
+});
+
+// 存储OTP验证码的内存缓存（生产环境应该使用Redis）
+const otpCache = new Map();
+
+// 生成6位随机数字验证码
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// 发送OTP验证码
+router.post('/send-otp', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format',
+        errors: errors.array()
+      });
+    }
+
+    const { email } = req.body;
+
+    // 检查用户是否存在（只允许后台管理创建的用户）
+    let userQuery = new AV.Query(AV.User);
+    userQuery.equalTo('email', email);
+    const existingUser = await userQuery.first();
+
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在，请联系管理员注册账号'
+      });
+    }
+
+    // 生成6位随机OTP验证码
+    const otp = generateOTP();
+    const expiresAt = Date.now() + (5 * 60 * 1000); // 5分钟后过期
+
+    // 存储OTP到缓存
+    otpCache.set(email, { otp, expiresAt });
+
+    console.log(`📧 发送OTP验证码到邮箱: ${email}`);
+    console.log(`🔢 生成的OTP: ${otp} (有效期5分钟)`);
+
+    // 开发模式：显示OTP并返回给前端
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`🔍 开发模式：OTP验证码是 ${otp} (用于邮箱: ${email})`);
+      console.log(`💡 提示：开发模式下OTP会返回给前端显示，可用于测试登录`);
+
+      return res.json({
+        success: true,
+        message: 'OTP generated successfully (development mode)',
+        note: `开发模式：您的OTP验证码是 ${otp}。请使用此验证码登录。`,
+        otp: otp, // 在开发模式下直接返回OTP，方便前端显示
+        development: true
+      });
+    }
+
+    // 生产环境：发送包含OTP的邮件
+    try {
+      // TODO: 集成实际的邮件服务
+      // 当前版本只在开发模式下工作
+      console.log(`📧 生产环境OTP邮件需要配置: ${email} -> 验证码: ${otp}`);
+
+      // 清除缓存的OTP（因为无法发送邮件）
+      otpCache.delete(email);
+
+      return res.status(500).json({
+        success: false,
+        message: '生产环境邮件服务未配置，请使用开发模式或联系管理员'
+      });
+    } catch (emailError) {
+      console.error(`❌ 邮件服务错误:`, emailError);
+
+      // 清除缓存的OTP
+      otpCache.delete(email);
+
+      return res.status(500).json({
+        success: false,
+        message: '邮件服务暂时不可用，请稍后再试'
+      });
+    }
+
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP'
+    });
+  }
+});
+
+// 邮箱登录
+router.post('/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('otp').isLength({ min: 6, max: 6 }).isNumeric()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input',
+        errors: errors.array()
+      });
+    }
+
+    const { email, otp } = req.body;
+
+    // 验证OTP
+    const cachedOTP = otpCache.get(email);
+
+    if (!cachedOTP) {
+      return res.status(401).json({
+        success: false,
+        message: 'OTP not found or expired. Please request a new one.'
+      });
+    }
+
+    // 检查OTP是否过期
+    if (Date.now() > cachedOTP.expiresAt) {
+      otpCache.delete(email);
+      return res.status(401).json({
+        success: false,
+        message: 'OTP has expired. Please request a new one.'
+      });
+    }
+
+    // 验证OTP是否正确
+    if (cachedOTP.otp !== otp) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid OTP code'
+      });
+    }
+
+    // OTP验证成功，清除缓存
+    otpCache.delete(email);
+
+    let user;
+
+    // 查找用户（只允许后台管理创建的用户登录）
+    let userQuery = new AV.Query(AV.User);
+    userQuery.equalTo('email', email);
+    user = await userQuery.first();
+
+    if (!user) {
+      // 如果用户不存在，返回用户不存在错误
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在，请联系管理员注册账号'
+      });
+    }
+
+    // 生成session token (包含用户ID以便后续验证)
+    const sessionToken = `otp-token-${Date.now()}-${Math.random()}-${user.id}`;
+    user._sessionToken = sessionToken;
+
+    // 获取用户详细信息
+    const userData = {
+      id: user.id,
+      username: user.get('username') || user.get('email'),
+      email: user.get('email'),
+      avatar: user.get('avatar'),
+      joinDate: user.createdAt.toISOString().split('T')[0],
+      totalVideos: user.get('totalVideos') || 0,
+      totalViews: user.get('totalViews') || 0,
+      canPublish: user.get('canPublish') !== false,
+      canComment: user.get('canComment') !== false
+    };
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      user: userData,
+      sessionToken: user.getSessionToken()
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Invalid credentials'
+    });
+  }
+});
+
+// 用户认证中间件
+const authenticateUser = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'No authentication token provided'
+      });
+    }
+
+    const sessionToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    // 我们的session token格式是: otp-token-{timestamp}-{random}-{userId}
+    if (!sessionToken.startsWith('otp-token-')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid session token'
+      });
+    }
+
+    // 从token中提取用户ID
+    const tokenParts = sessionToken.split('-');
+    if (tokenParts.length >= 5) {
+      const userId = tokenParts.slice(4).join('-'); // 处理userId中可能包含的'-'字符
+
+      try {
+        // 从LeanCloud获取用户信息
+        const user = await new AV.Query(AV.User).get(userId);
+        if (user) {
+          req.user = user;
+          return next();
+        }
+      } catch (error) {
+        console.error('User lookup error:', error);
+      }
+    }
+
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication failed - user not found'
+    });
+
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication error'
+    });
+  }
+};
+
+// 获取当前用户信息
+router.get('/me', authenticateUser, async (req, res) => {
+  try {
+    const currentUser = req.user;
+
+    const userData = {
+      id: currentUser.id,
+      username: currentUser.get('username') || currentUser.get('email'),
+      email: currentUser.get('email'),
+      avatar: currentUser.get('avatar'),
+      joinDate: currentUser.createdAt.toISOString().split('T')[0],
+      totalVideos: currentUser.get('totalVideos') || 0,
+      totalViews: currentUser.get('totalViews') || 0,
+      canPublish: currentUser.get('canPublish') !== false,
+      canComment: currentUser.get('canComment') !== false
+    };
+
+    res.json({
+      success: true,
+      user: userData
+    });
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user info'
+    });
+  }
+});
+
+// 登出
+router.post('/logout', async (req, res) => {
+  try {
+    await AV.User.logOut();
+    res.json({
+      success: true,
+      message: 'Logout successful'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
+  }
+});
+
+module.exports = router;

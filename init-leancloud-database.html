@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LeanCloud数据库初始化</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; margin: 0 auto; }
+        .step { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; border: none; border-radius: 3px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .primary { background-color: #007bff; color: white; }
+        .primary:hover:not(:disabled) { background-color: #0056b3; }
+        .secondary { background-color: #6c757d; color: white; }
+        .secondary:hover:not(:disabled) { background-color: #545b62; }
+        pre { background: #f4f4f4; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .progress { margin: 10px 0; }
+        .progress-bar { height: 20px; background-color: #007bff; border-radius: 10px; transition: width 0.3s; }
+        .progress-container { height: 20px; background-color: #e9ecef; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗄️ LeanCloud数据库初始化工具</h1>
+        <p>用于初始化知识视频APP的数据库结构和基础数据</p>
+        <p><small>App ID: RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz</small></p>
+    </div>
+
+    <div id="status" class="step info">
+        <strong>📋 状态：</strong>准备就绪，请按顺序执行初始化步骤
+    </div>
+
+    <div class="step">
+        <h3>🔗 步骤1: 初始化LeanCloud连接</h3>
+        <button onclick="initLeanCloud()" class="primary" id="connectBtn">连接LeanCloud</button>
+        <div id="connection-status"></div>
+    </div>
+
+    <div class="step">
+        <h3>📂 步骤2: 创建分类数据</h3>
+        <p>创建三个视频分类：科技、艺术人文、商业业务</p>
+        <button onclick="createCategories()" class="primary" id="createCategoriesBtn" disabled>创建分类</button>
+        <div id="categories-status"></div>
+        <div class="progress" id="categories-progress" style="display: none;">
+            <div class="progress-container">
+                <div class="progress-bar" id="categories-bar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>📚 步骤3: 创建示例书籍</h3>
+        <p>创建三本示例书籍用于测试</p>
+        <button onclick="createSampleBooks()" class="primary" id="createBooksBtn" disabled>创建示例书籍</button>
+        <div id="books-status"></div>
+        <div class="progress" id="books-progress" style="display: none;">
+            <div class="progress-container">
+                <div class="progress-bar" id="books-bar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>🎬 步骤4: 创建示例视频</h3>
+        <p>创建三个示例视频用于测试播放功能</p>
+        <button onclick="createSampleVideos()" class="primary" id="createVideosBtn" disabled>创建示例视频</button>
+        <div id="videos-status"></div>
+        <div class="progress" id="videos-progress" style="display: none;">
+            <div class="progress-container">
+                <div class="progress-bar" id="videos-bar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>📊 步骤5: 创建每日统计记录</h3>
+        <p>创建今日的统计数据记录</p>
+        <button onclick="createStatistics()" class="primary" id="createStatsBtn" disabled>创建统计数据</button>
+        <div id="stats-status"></div>
+    </div>
+
+    <div class="step warning">
+        <h3>⚠️ 注意事项</h3>
+        <ul>
+            <li>请确保网络连接正常</li>
+            <li>初始化过程中请勿关闭页面</li>
+            <li>如果某步骤失败，可以单独重新执行</li>
+            <li>初始化完成后，建议在LeanCloud控制台验证数据</li>
+        </ul>
+    </div>
+
+    <div class="step success">
+        <h3>✅ 完成</h3>
+        <p>初始化完成后，您可以在LeanCloud控制台查看创建的数据。</p>
+        <p><strong>控制台地址：</strong> <a href="https://leancloud.cn/dashboard/" target="_blank">https://leancloud.cn/dashboard/</a></p>
+        <p><strong>应用名称：</strong> knowledge-video-app</p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4/dist/av-min.js"></script>
+    <script>
+        let isConnected = false;
+
+        // LeanCloud配置
+        const LEANCLOUD_CONFIG = {
+            appId: 'RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz',
+            appKey: '1w0cQLBZIaJ32tjaU7RkDu3n',
+            serverURL: 'https://rdecdltb.lc-cn-n1-shared.com'
+        };
+
+        async function initLeanCloud() {
+            const btn = document.getElementById('connectBtn');
+            const statusDiv = document.getElementById('connection-status');
+
+            btn.disabled = true;
+            btn.textContent = '连接中...';
+            statusDiv.innerHTML = '正在连接LeanCloud...';
+
+            try {
+                AV.init(LEANCLOUD_CONFIG);
+
+                // 测试连接
+                const testQuery = new AV.Query('_User');
+                testQuery.limit(1);
+                await testQuery.find();
+
+                statusDiv.innerHTML = '<span style="color: green;">✓ LeanCloud连接成功！应用配置正确。</span>';
+                document.getElementById('createCategoriesBtn').disabled = false;
+                isConnected = true;
+                btn.textContent = '已连接';
+                btn.className = 'secondary';
+
+            } catch (error) {
+                statusDiv.innerHTML = '<span style="color: red;">✗ 连接失败: ' + error.message + '</span>';
+                btn.disabled = false;
+                btn.textContent = '重试连接';
+            }
+        }
+
+        async function createCategories() {
+            if (!isConnected) {
+                alert('请先连接LeanCloud');
+                return;
+            }
+
+            const statusDiv = document.getElementById('categories-status');
+            const progressDiv = document.getElementById('categories-progress');
+            const progressBar = document.getElementById('categories-bar');
+            const btn = document.getElementById('createCategoriesBtn');
+
+            btn.disabled = true;
+            btn.textContent = '创建中...';
+            statusDiv.innerHTML = '正在创建分类...';
+            progressDiv.style.display = 'block';
+
+            try {
+                const categories = [
+                    { name: 'Tech', nameCn: '科技', sortOrder: 1 },
+                    { name: 'Arts', nameCn: '艺术人文', sortOrder: 2 },
+                    { name: 'Business', nameCn: '商业业务', sortOrder: 3 }
+                ];
+
+                for (let i = 0; i < categories.length; i++) {
+                    const cat = categories[i];
+                    const Category = AV.Object.extend('Category');
+                    const category = new Category();
+                    category.set('name', cat.name);
+                    category.set('nameCn', cat.nameCn);
+                    category.set('sortOrder', cat.sortOrder);
+                    await category.save();
+
+                    statusDiv.innerHTML += `<br>✓ 创建分类: ${cat.nameCn}`;
+                    progressBar.style.width = `${((i + 1) / categories.length) * 100}%`;
+                }
+
+                statusDiv.innerHTML += '<br><span style="color: green;">分类创建完成！</span>';
+                document.getElementById('createBooksBtn').disabled = false;
+                btn.textContent = '已完成';
+                btn.className = 'secondary';
+
+            } catch (error) {
+                statusDiv.innerHTML += `<br><span style="color: red;">✗ 创建失败: ${error.message}</span>`;
+                btn.disabled = false;
+                btn.textContent = '重试创建';
+            }
+        }
+
+        async function createSampleBooks() {
+            const statusDiv = document.getElementById('books-status');
+            const progressDiv = document.getElementById('books-progress');
+            const progressBar = document.getElementById('books-bar');
+            const btn = document.getElementById('createBooksBtn');
+
+            btn.disabled = true;
+            btn.textContent = '创建中...';
+            statusDiv.innerHTML = '正在创建示例书籍...';
+            progressDiv.style.display = 'block';
+
+            try {
+                // 获取分类
+                const Category = AV.Object.extend('Category');
+                const categoryQuery = new AV.Query(Category);
+                const categories = await categoryQuery.find();
+
+                const categoryMap = {};
+                categories.forEach(cat => {
+                    categoryMap[cat.get('name')] = cat;
+                });
+
+                const sampleBooks = [
+                    {
+                        title: '深度学习',
+                        author: 'Ian Goodfellow',
+                        isbn: '9787115434281',
+                        category: 'Tech',
+                        description: '深度学习经典教材，全面介绍深度学习理论与实践'
+                    },
+                    {
+                        title: '百年孤独',
+                        author: '加西亚·马尔克斯',
+                        isbn: '9787532768849',
+                        category: 'Arts',
+                        description: '魔幻现实主义文学巅峰之作，讲述布恩迪亚家族七代人的传奇故事'
+                    },
+                    {
+                        title: '影响力',
+                        author: '罗伯特·西奥迪尼',
+                        isbn: '9787508667168',
+                        category: 'Business',
+                        description: '心理学与营销学的经典之作，揭示人类行为背后的规律'
+                    }
+                ];
+
+                for (let i = 0; i < sampleBooks.length; i++) {
+                    const bookData = sampleBooks[i];
+                    const Book = AV.Object.extend('Book');
+                    const book = new Book();
+
+                    book.set('title', bookData.title);
+                    book.set('author', bookData.author);
+                    book.set('isbn', bookData.isbn);
+                    book.set('category', categoryMap[bookData.category]);
+                    book.set('uploadDate', new Date().toISOString().split('T')[0]);
+                    book.set('status', '待处理');
+
+                    await book.save();
+                    statusDiv.innerHTML += `<br>✓ 创建书籍: ${bookData.title}`;
+                    progressBar.style.width = `${((i + 1) / sampleBooks.length) * 100}%`;
+                }
+
+                statusDiv.innerHTML += '<br><span style="color: green;">示例书籍创建完成！</span>';
+                document.getElementById('createVideosBtn').disabled = false;
+                btn.textContent = '已完成';
+                btn.className = 'secondary';
+
+            } catch (error) {
+                statusDiv.innerHTML += `<br><span style="color: red;">✗ 创建失败: ${error.message}</span>`;
+                btn.disabled = false;
+                btn.textContent = '重试创建';
+            }
+        }
+
+        async function createSampleVideos() {
+            const statusDiv = document.getElementById('videos-status');
+            const progressDiv = document.getElementById('videos-progress');
+            const progressBar = document.getElementById('videos-bar');
+            const btn = document.getElementById('createVideosBtn');
+
+            btn.disabled = true;
+            btn.textContent = '创建中...';
+            statusDiv.innerHTML = '正在创建示例视频...';
+            progressDiv.style.display = 'block';
+
+            try {
+                // 获取书籍和分类
+                const Book = AV.Object.extend('Book');
+                const bookQuery = new AV.Query(Book);
+                const books = await bookQuery.find();
+
+                const Category = AV.Object.extend('Category');
+                const categoryQuery = new AV.Query(Category);
+                const categories = await categoryQuery.find();
+
+                const categoryMap = {};
+                categories.forEach(cat => {
+                    categoryMap[cat.get('name')] = cat;
+                });
+
+                const sampleVideos = [
+                    {
+                        title: '神经网络基础',
+                        titleEn: 'Neural Network Basics',
+                        category: 'Tech',
+                        duration: 180,
+                        description: '深度学习入门：神经网络的基本概念和工作原理'
+                    },
+                    {
+                        title: '魔幻现实主义解析',
+                        titleEn: 'Analysis of Magical Realism',
+                        category: 'Arts',
+                        duration: 240,
+                        description: '文学分析：百年孤独中的魔幻现实主义手法'
+                    },
+                    {
+                        title: '说服力心理学',
+                        titleEn: 'Psychology of Persuasion',
+                        category: 'Business',
+                        duration: 200,
+                        description: '影响力剖析：六大说服原则在商业中的应用'
+                    }
+                ];
+
+                for (let i = 0; i < sampleVideos.length; i++) {
+                    const videoData = sampleVideos[i];
+                    const Video = AV.Object.extend('Video');
+                    const video = new Video();
+
+                    video.set('title', videoData.title);
+                    video.set('titleEn', videoData.titleEn);
+                    video.set('category', categoryMap[videoData.category]);
+                    video.set('book', books[i % books.length]); // 循环分配书籍
+                    video.set('duration', videoData.duration);
+                    video.set('fileSize', videoData.duration * 1024 * 1024); // 估算文件大小
+                    video.set('status', '已发布');
+                    video.set('disabled', false);
+                    video.set('viewCount', Math.floor(Math.random() * 1000));
+                    video.set('likeCount', Math.floor(Math.random() * 100));
+                    video.set('uploadDate', new Date().toISOString().split('T')[0]);
+                    video.set('publishDate', new Date().toISOString().split('T')[0]);
+                    video.set('aiExtractDate', new Date().toISOString().split('T')[0]);
+                    video.set('coverUrl', 'https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400');
+
+                    await video.save();
+                    statusDiv.innerHTML += `<br>✓ 创建视频: ${videoData.title}`;
+                    progressBar.style.width = `${((i + 1) / sampleVideos.length) * 100}%`;
+                }
+
+                statusDiv.innerHTML += '<br><span style="color: green;">示例视频创建完成！</span>';
+                document.getElementById('createStatsBtn').disabled = false;
+                btn.textContent = '已完成';
+                btn.className = 'secondary';
+
+            } catch (error) {
+                statusDiv.innerHTML += `<br><span style="color: red;">✗ 创建失败: ${error.message}</span>`;
+                btn.disabled = false;
+                btn.textContent = '重试创建';
+            }
+        }
+
+        async function createStatistics() {
+            const statusDiv = document.getElementById('stats-status');
+            const btn = document.getElementById('createStatsBtn');
+
+            btn.disabled = true;
+            btn.textContent = '创建中...';
+            statusDiv.innerHTML = '正在创建统计数据...';
+
+            try {
+                const StatisticsDaily = AV.Object.extend('StatisticsDaily');
+                const stats = new StatisticsDaily();
+
+                const today = new Date().toISOString().split('T')[0];
+
+                stats.set('date', today);
+                stats.set('totalUsers', 0);
+                stats.set('activeUsers', 0);
+                stats.set('newUsers', 0);
+                stats.set('totalVideos', 3);
+                stats.set('newVideos', 3);
+                stats.set('publishedVideos', 3);
+                stats.set('totalViews', 1500);
+                stats.set('totalLikes', 200);
+                stats.set('totalComments', 0);
+                stats.set('pendingAudits', 0);
+
+                await stats.save();
+                statusDiv.innerHTML += `<br>✓ 创建统计数据: ${today}`;
+                statusDiv.innerHTML += '<br><span style="color: green;">统计数据创建完成！</span>';
+
+                btn.textContent = '已完成';
+                btn.className = 'secondary';
+
+                document.getElementById('status').innerHTML =
+                    '<strong>📋 状态：</strong><span style="color: green;">所有初始化步骤已完成！您现在可以在LeanCloud控制台查看创建的数据。</span>';
+
+            } catch (error) {
+                statusDiv.innerHTML += `<br><span style="color: red;">✗ 创建失败: ${error.message}</span>`;
+                btn.disabled = false;
+                btn.textContent = '重试创建';
+            }
+        }
+    </script>
+</body>
+</html>

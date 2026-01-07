@@ -1,0 +1,20 @@
+{
+  "name": "knowledge-video-app",
+  "version": "1.0.0",
+  "description": "基于书籍内容的知识分享视频应用",
+  "scripts": {
+    "init:db": "node scripts/init-database.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:admin": "cd admin && npm run dev",
+    "install:all": "npm install && cd frontend && npm install && cd ../admin && npm install",
+    "build:frontend": "cd frontend && npm run build",
+    "build:admin": "cd admin && npm run build"
+  },
+  "dependencies": {
+    "leancloud-storage": "^4.15.0"
+  },
+  "devDependencies": {},
+  "keywords": ["video", "knowledge", "react", "leancloud"],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清除缓存工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6">清除缓存工具</h1>
+        <p class="text-gray-600 text-center mb-6">
+            如果前端界面没有更新最新内容，请使用此工具清除所有缓存
+        </p>
+
+        <div class="space-y-4">
+            <button
+                onclick="clearLocalStorage()"
+                class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded"
+            >
+                1. 清除本地存储 (LocalStorage)
+            </button>
+
+            <button
+                onclick="clearSessionStorage()"
+                class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-4 rounded"
+            >
+                2. 清除会话存储 (SessionStorage)
+            </button>
+
+            <button
+                onclick="clearAllCache()"
+                class="w-full bg-purple-500 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded"
+            >
+                3. 清除所有缓存
+            </button>
+
+            <button
+                onclick="forceRefresh()"
+                class="w-full bg-red-500 hover:bg-red-700 text-white font-bold py-3 px-4 rounded"
+            >
+                4. 强制刷新页面
+            </button>
+
+            <button
+                onclick="goToApp()"
+                class="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded"
+            >
+                前往主应用
+            </button>
+        </div>
+
+        <div id="result" class="mt-6 text-center text-sm"></div>
+    </div>
+
+    <script>
+        function showResult(message, isSuccess = true) {
+            const result = document.getElementById('result');
+            result.innerHTML = `<span class="${isSuccess ? 'text-green-600' : 'text-red-600'}">${message}</span>`;
+        }
+
+        function clearLocalStorage() {
+            try {
+                localStorage.clear();
+                showResult('✅ 本地存储已清除');
+                console.log('本地存储已清除');
+            } catch (error) {
+                showResult('❌ 清除本地存储失败', false);
+                console.error('清除本地存储失败:', error);
+            }
+        }
+
+        function clearSessionStorage() {
+            try {
+                sessionStorage.clear();
+                showResult('✅ 会话存储已清除');
+                console.log('会话存储已清除');
+            } catch (error) {
+                showResult('❌ 清除会话存储失败', false);
+                console.error('清除会话存储失败:', error);
+            }
+        }
+
+        function clearAllCache() {
+            try {
+                // 清除本地存储
+                localStorage.clear();
+                sessionStorage.clear();
+
+                // 清除Service Worker缓存（如果存在）
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(registrations => {
+                        registrations.forEach(registration => {
+                            registration.unregister();
+                        });
+                    });
+                }
+
+                // 清除缓存存储
+                if ('caches' in window) {
+                    caches.keys().then(names => {
+                        names.forEach(name => {
+                            caches.delete(name);
+                        });
+                    });
+                }
+
+                showResult('✅ 所有缓存已清除');
+                console.log('所有缓存已清除');
+            } catch (error) {
+                showResult('❌ 清除缓存失败', false);
+                console.error('清除缓存失败:', error);
+            }
+        }
+
+        function forceRefresh() {
+            // 强制刷新，清除所有缓存
+            window.location.reload(true);
+        }
+
+        function goToApp() {
+            window.location.href = 'http://localhost:5173/';
+        }
+
+        // 页面加载时显示当前存储状态
+        window.addEventListener('load', function() {
+            console.log('缓存清除工具已加载');
+            console.log('LocalStorage项目数:', localStorage.length);
+            console.log('SessionStorage项目数:', sessionStorage.length);
+
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <div class="text-left text-xs text-gray-500">
+                    <div>LocalStorage: ${localStorage.length} 项</div>
+                    <div>SessionStorage: ${sessionStorage.length} 项</div>
+                </div>
+            `;
+        });
+    </script>
+</body>
+</html>

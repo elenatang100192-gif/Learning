@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTP测试页面</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6">OTP 测试页面</h1>
+
+        <!-- 邮箱输入 -->
+        <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                邮箱地址
+            </label>
+            <input
+                type="email"
+                id="email"
+                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                placeholder="your-email@example.com"
+                value="elenatang1001@163.com"
+            >
+        </div>
+
+        <!-- 发送OTP按钮 -->
+        <button
+            id="sendOtpBtn"
+            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full mb-4"
+            onclick="sendOTP()"
+        >
+            发送OTP验证码
+        </button>
+
+        <!-- OTP显示区域 -->
+        <div id="otpDisplay" class="hidden bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+            <strong>开发模式OTP:</strong>
+            <span id="otpCode" class="font-mono text-lg font-bold"></span>
+        </div>
+
+        <!-- OTP输入 -->
+        <div id="otpSection" class="hidden mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="otp">
+                输入OTP验证码
+            </label>
+            <input
+                type="text"
+                id="otp"
+                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline text-center text-2xl tracking-widest font-mono"
+                maxlength="6"
+                placeholder="123456"
+            >
+        </div>
+
+        <!-- 登录按钮 -->
+        <button
+            id="loginBtn"
+            class="hidden bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full"
+            onclick="login()"
+        >
+            登录
+        </button>
+
+        <!-- 结果显示 -->
+        <div id="result" class="mt-4 text-center"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3001/api';
+
+        async function sendOTP() {
+            const email = document.getElementById('email').value;
+            const btn = document.getElementById('sendOtpBtn');
+            const result = document.getElementById('result');
+
+            if (!email) {
+                result.innerHTML = '<span class="text-red-500">请输入邮箱地址</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '发送中...';
+            result.innerHTML = '发送中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.innerHTML = '<span class="text-green-500">OTP发送成功！</span>';
+
+                    // 显示OTP（开发模式）
+                    if (data.development && data.otp) {
+                        document.getElementById('otpCode').textContent = data.otp;
+                        document.getElementById('otpDisplay').classList.remove('hidden');
+                        document.getElementById('otpSection').classList.remove('hidden');
+                        document.getElementById('loginBtn').classList.remove('hidden');
+                        document.getElementById('otp').value = data.otp; // 自动填充OTP
+                    }
+                } else {
+                    result.innerHTML = `<span class="text-red-500">${data.message}</span>`;
+                }
+            } catch (error) {
+                result.innerHTML = '<span class="text-red-500">发送失败，请重试</span>';
+                console.error('OTP发送错误:', error);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '发送OTP验证码';
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const otp = document.getElementById('otp').value;
+            const result = document.getElementById('result');
+
+            if (!otp || otp.length !== 6) {
+                result.innerHTML = '<span class="text-red-500">请输入6位OTP验证码</span>';
+                return;
+            }
+
+            result.innerHTML = '登录中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, otp })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.innerHTML = '<span class="text-green-500">登录成功！</span>';
+                    alert('登录成功！现在您可以访问主应用了。');
+                    window.location.href = 'http://localhost:5173/';
+                } else {
+                    result.innerHTML = `<span class="text-red-500">${data.message}</span>`;
+                }
+            } catch (error) {
+                result.innerHTML = '<span class="text-red-500">登录失败，请重试</span>';
+                console.error('登录错误:', error);
+            }
+        }
+
+        // 回车键支持
+        document.getElementById('email').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendOTP();
+            }
+        });
+
+        document.getElementById('otp').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+    </script>
+</body>
+</html>
