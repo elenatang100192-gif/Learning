@@ -10,10 +10,10 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // 从localStorage读取保存的语言偏好，如果没有则默认为中文
+  // 从localStorage读取保存的语言偏好，如果没有则默认为英文
   const [language, setLanguage] = useState<Language>(() => {
     const savedLanguage = localStorage.getItem('preferredLanguage') as Language;
-    return savedLanguage === 'zh' || savedLanguage === 'en' ? savedLanguage : 'zh';
+    return savedLanguage === 'zh' || savedLanguage === 'en' ? savedLanguage : 'en';
   });
 
   // 包装setLanguage，同时保存到localStorage

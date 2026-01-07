@@ -12,7 +12,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [step, setStep] = useState<'email' | 'otp'>('email');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState<'zh' | 'en'>('zh');
+  const [selectedLanguage, setSelectedLanguage] = useState<'zh' | 'en'>('en');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
