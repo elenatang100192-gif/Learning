@@ -623,8 +623,24 @@ VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
 
 1. 部署完成后，在站点列表中点击你的站点
 2. 在站点详情页面，找到 "访问地址"
-3. 复制访问地址，格式类似：`https://frontend-xxx.tcloudbaseapp.com`
+3. 复制访问地址，格式类似：`https://frontend-xxx.tcloudbaseapp.com` 或 `https://xxx.tcloudbaseapp.com/Video-frontend/`
 4. 这就是你的前端应用地址
+
+**⚠️ 重要：如果部署在子路径下**
+
+如果 CloudBase 将你的站点部署在子路径下（如 `/Video-frontend/`），需要配置 `base` 路径：
+
+1. 在 `frontend/vite.config.ts` 中添加 `base` 配置：
+   ```typescript
+   export default defineConfig({
+     // ... 其他配置
+     base: '/Video-frontend/', // 替换为你的实际子路径
+   })
+   ```
+
+2. 重新构建并部署
+
+**注意**: `base` 路径必须与 CloudBase 部署的实际路径一致（包括前后的斜杠）。
 
 #### 部署后台管理界面
 
@@ -663,6 +679,22 @@ VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
 - **输出目录**: `dist`
   - Vite 构建后的输出目录
 - **环境变量**: 与前端应用相同（包括 `VITE_API_BASE_URL`）
+
+**⚠️ 重要：如果部署在子路径下**
+
+如果 CloudBase 将你的站点部署在子路径下（如 `/Video-admin/`），需要配置 `base` 路径：
+
+1. 在 `admin/vite.config.ts` 中添加 `base` 配置：
+   ```typescript
+   export default defineConfig({
+     // ... 其他配置
+     base: '/Video-admin/', // 替换为你的实际子路径
+   })
+   ```
+
+2. 重新构建并部署
+
+**注意**: `base` 路径必须与 CloudBase 部署的实际路径一致（包括前后的斜杠）。
 
 **步骤 8: 获取访问地址**
 

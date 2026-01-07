@@ -29,5 +29,6 @@ export default defineConfig({
     sourcemap: true,
     minify: false,
   },
+  base: '/Video-frontend/', // 设置基础路径，匹配部署路径
 })
 
