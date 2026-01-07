@@ -42,27 +42,39 @@ const allowedOrigins = [
 app.use(cors({
   origin: function (origin, callback) {
     // 允许没有origin的请求（如移动应用或Postman）
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('✅ CORS: Allowing request without origin');
+      return callback(null, true);
+    }
+    
+    console.log(`🌐 CORS: Checking origin: ${origin}`);
     
     // 检查origin是否在白名单中
     if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log(`✅ CORS: Origin in whitelist: ${origin}`);
       callback(null, true);
-    } else {
-      // 在生产环境中，允许所有Netlify域名和CloudBase静态网站托管域名
-      if (process.env.NODE_ENV === 'production' && origin) {
-        if (origin.includes('.netlify.app') || origin.includes('.tcloudbaseapp.com')) {
-          callback(null, true);
-          return;
-        }
-      }
-      // 开发环境也允许CloudBase域名（用于测试）
-      if (origin && origin.includes('.tcloudbaseapp.com')) {
+      return;
+    }
+    
+    // 在生产环境中，允许所有Netlify域名和CloudBase静态网站托管域名
+    if (process.env.NODE_ENV === 'production' && origin) {
+      if (origin.includes('.netlify.app') || origin.includes('.tcloudbaseapp.com')) {
+        console.log(`✅ CORS: Allowing CloudBase/Netlify origin: ${origin}`);
         callback(null, true);
         return;
       }
-      console.warn(`⚠️ CORS blocked origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
     }
+    
+    // 开发环境也允许CloudBase域名（用于测试）
+    if (origin && origin.includes('.tcloudbaseapp.com')) {
+      console.log(`✅ CORS: Allowing CloudBase origin (dev): ${origin}`);
+      callback(null, true);
+      return;
+    }
+    
+    console.warn(`⚠️ CORS blocked origin: ${origin}`);
+    console.warn(`📋 Allowed origins:`, allowedOrigins);
+    callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
