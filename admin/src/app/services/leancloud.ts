@@ -385,8 +385,6 @@ export const bookAPI = {
       createdAt: book.createdAt
     } as Book;
   },
-    } as Book;
-  },
 
   // 上传电子书文件（支持进度回调）
   async uploadBook(
