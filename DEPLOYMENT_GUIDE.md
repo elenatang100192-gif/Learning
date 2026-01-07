@@ -1031,15 +1031,30 @@ ADMIN_URL=https://your-admin-app.netlify.app
   - 视频列表：`https://your-service-id.region.app.tcloudbase.com/api/videos`
   - 书籍列表：`https://your-service-id.region.app.tcloudbase.com/api/books`
 
-**步骤 12: 更新前端环境变量**
+**步骤 12: 更新前端和后台管理界面的环境变量**
+
 在 CloudBase 静态网站托管中更新前端应用和后台管理界面的环境变量：
+
+**前端应用环境变量**：
 ```
-VITE_API_BASE_URL=https://your-service-id.region.app.tcloudbase.com/api
+VITE_LEANCLOUD_APP_ID=RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz
+VITE_LEANCLOUD_APP_KEY=1w0cQLBZIaJ32tjaU7RkDu3n
+VITE_LEANCLOUD_SERVER_URL=https://rdecdltb.lc-cn-n1-shared.com
+VITE_API_BASE_URL=https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api
 ```
 
-**注意**: 
+**后台管理界面环境变量**：
+```
+VITE_LEANCLOUD_APP_ID=RDeCDLtbY5VWuuVuOV8GUfbl-gzGzoHsz
+VITE_LEANCLOUD_APP_KEY=1w0cQLBZIaJ32tjaU7RkDu3n
+VITE_LEANCLOUD_SERVER_URL=https://rdecdltb.lc-cn-n1-shared.com
+VITE_API_BASE_URL=https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api
+```
+
+**⚠️ 重要提示**: 
 - `VITE_API_BASE_URL` 必须以 `/api` 结尾
 - 如果服务地址是 `https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com`，则 `VITE_API_BASE_URL` 应该是 `https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api`
+- 确保后端服务已正确配置 CORS，允许来自 CloudBase 静态网站托管域名的请求（已自动配置）
 
 **文档**: https://cloud.tencent.com/document/product/876
 
