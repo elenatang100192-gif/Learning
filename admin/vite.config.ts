@@ -29,4 +29,5 @@ export default defineConfig({
       external: [], // leancloud-storage 不应该被 externalize，应该在构建时包含
     },
   },
+  base: '/Video-admin/', // 设置基础路径，匹配部署路径
 })
