@@ -45,5 +45,6 @@ export default defineConfig({
   optimizeDeps: {
     force: true,
   },
+  base: '/Video-frontend/', // 设置基础路径，匹配部署路径
 });
 
