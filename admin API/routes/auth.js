@@ -137,6 +137,18 @@ router.post('/send-otp', [
       });
     } catch (emailError) {
       console.error(`❌ 邮件服务错误:`, emailError);
+      console.error(`📋 错误详情:`, {
+        message: emailError.message,
+        stack: emailError.stack,
+        envCheck: {
+          EMAIL_USER: process.env.EMAIL_USER ? '已设置' : '未设置',
+          EMAIL_PASS: process.env.EMAIL_PASS ? '已设置' : '未设置',
+          EMAIL_HOST: process.env.EMAIL_HOST || '未设置',
+          EMAIL_PORT: process.env.EMAIL_PORT || '未设置',
+          EMAIL_SECURE: process.env.EMAIL_SECURE || '未设置',
+          NODE_ENV: process.env.NODE_ENV || '未设置'
+        }
+      });
 
       // 清除缓存的OTP
       otpCache.delete(email);
@@ -146,14 +158,16 @@ router.post('/send-otp', [
         return res.status(500).json({
           success: false,
           message: '生产环境邮件服务未配置，请使用开发模式或联系管理员',
-          details: '请配置 EMAIL_USER 和 EMAIL_PASS 环境变量'
+          details: emailError.message,
+          hint: '请确保在 CloudBase Run 控制台中配置了 EMAIL_USER、EMAIL_PASS、EMAIL_HOST、EMAIL_PORT、EMAIL_SECURE 环境变量，并重启服务'
         });
       }
 
       return res.status(500).json({
         success: false,
         message: '邮件服务暂时不可用，请稍后再试',
-        details: emailError.message
+        details: emailError.message,
+        hint: '请检查邮件服务配置和网络连接，或查看服务器日志获取更多信息'
       });
     }
 

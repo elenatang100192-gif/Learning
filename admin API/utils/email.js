@@ -24,6 +24,14 @@ function initEmailService() {
   // 检查是否配置了邮件服务
   if (!emailConfig.auth.user || !emailConfig.auth.pass) {
     console.warn('⚠️ 邮件服务未配置：EMAIL_USER 和 EMAIL_PASS 环境变量未设置');
+    console.warn('📋 当前环境变量状态:');
+    console.warn(`   EMAIL_USER: ${process.env.EMAIL_USER ? '已设置' : '未设置'}`);
+    console.warn(`   EMAIL_PASS: ${process.env.EMAIL_PASS ? '已设置（已隐藏）' : '未设置'}`);
+    console.warn(`   SMTP_USER: ${process.env.SMTP_USER ? '已设置' : '未设置'}`);
+    console.warn(`   SMTP_PASS: ${process.env.SMTP_PASS ? '已设置（已隐藏）' : '未设置'}`);
+    console.warn(`   EMAIL_HOST: ${process.env.EMAIL_HOST || process.env.SMTP_HOST || '未设置（将自动识别）'}`);
+    console.warn(`   EMAIL_PORT: ${process.env.EMAIL_PORT || process.env.SMTP_PORT || '未设置（将使用默认值）'}`);
+    console.warn(`   EMAIL_SECURE: ${process.env.EMAIL_SECURE || '未设置（将自动判断）'}`);
     return null;
   }
 
@@ -64,10 +72,17 @@ function initEmailService() {
 
   try {
     transporter = nodemailer.createTransport(emailConfig);
-    console.log(`✅ 邮件服务初始化成功: ${emailConfig.auth.user} (${emailConfig.host}:${emailConfig.port})`);
+    console.log(`✅ 邮件服务初始化成功: ${emailConfig.auth.user} (${emailConfig.host}:${emailConfig.port}, secure: ${emailConfig.secure})`);
     return transporter;
   } catch (error) {
     console.error('❌ 邮件服务初始化失败:', error);
+    console.error('📋 配置详情:', {
+      host: emailConfig.host,
+      port: emailConfig.port,
+      secure: emailConfig.secure,
+      user: emailConfig.auth.user,
+      pass: emailConfig.auth.pass ? '***已设置***' : '未设置'
+    });
     return null;
   }
 }
@@ -79,7 +94,18 @@ async function sendOTPEmail(email, otp) {
     const emailTransporter = initEmailService();
     
     if (!emailTransporter) {
-      throw new Error('邮件服务未配置');
+      const errorDetails = [];
+      if (!process.env.EMAIL_USER && !process.env.SMTP_USER) {
+        errorDetails.push('EMAIL_USER 或 SMTP_USER 未设置');
+      }
+      if (!process.env.EMAIL_PASS && !process.env.SMTP_PASS && !process.env.EMAIL_PASSWORD) {
+        errorDetails.push('EMAIL_PASS、SMTP_PASS 或 EMAIL_PASSWORD 未设置');
+      }
+      const errorMsg = errorDetails.length > 0 
+        ? `邮件服务未配置：${errorDetails.join('，')}`
+        : '邮件服务未配置：请检查环境变量设置';
+      console.error(`❌ ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
     // 邮件内容
