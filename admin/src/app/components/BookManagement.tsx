@@ -1572,25 +1572,19 @@ export function BookManagement() {
                             </p>
                           )}
                           
-                          {/* 英文音频播放器 */}
+                          {/* 英文音频链接 */}
                           {content.audioUrlEn && (
                             <div className="mt-4">
                               <div className="text-sm font-medium mb-2">English Audio:</div>
-                              <audio controls className="w-full">
-                                <source src={content.audioUrlEn} type="audio/mpeg" />
-                                Your browser does not support audio playback
-                              </audio>
-                              <div className="flex gap-2 mt-2">
-                                <Button 
-                                  variant="outline" 
-                                  className="flex-1"
-                                  size="sm"
-                                  onClick={() => window.open(content.audioUrlEn, '_blank')}
-                                >
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  Open Audio
-                                </Button>
-                              </div>
+                              <Button 
+                                variant="outline" 
+                                className="w-full"
+                                size="sm"
+                                onClick={() => window.open(content.audioUrlEn, '_blank')}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                Open Audio
+                              </Button>
                             </div>
                           )}
                         </div>
