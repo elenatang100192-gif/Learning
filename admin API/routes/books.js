@@ -3561,8 +3561,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       tempVideoPath, 
       tempAudioPath, 
       tempOutputPath,
-      ...(finalVideoPath !== tempVideoPath ? [finalVideoPath] : []), // 如果使用了拼接后的视频，也需要清理
-      ...(finalVideoPath !== tempVideoPath ? [path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`)] : []) // 清理concat列表文件
+      concatenatedVideoPath, // 拼接后的视频
+      concatListPath // concat列表文件
     ].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
