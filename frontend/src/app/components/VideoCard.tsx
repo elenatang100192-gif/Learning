@@ -210,36 +210,51 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       </div>
 
-      {/* 底部信息区域 - 抖音风格：固定在底部导航上方 */}
-      <div className="absolute bottom-20 left-0 right-0 z-10 pb-4 px-4">
-        {/* 视频信息 - 抖音风格：左侧作者信息 */}
-        <div className="text-white">
-          <div className="flex items-center gap-3 mb-2">
+      {/* 顶部作者信息区域 - 位于导航菜单下方 */}
+      <div className="absolute top-16 left-0 right-0 z-40 pt-2 px-4">
+        {/* 背景渐变，确保文字可见 */}
+        <div className="bg-gradient-to-b from-black/80 via-black/60 to-transparent pb-4 -mx-4 px-4 rounded-b-lg">
+          {/* 视频信息 - 抖音风格：左侧作者信息 */}
+          <div className="text-white">
+            <div className="flex items-center gap-3 mb-2">
               <img
                 src={video.avatar}
                 alt={video.author}
-              className="w-10 h-10 rounded-full border-2 border-white object-cover flex-shrink-0"
+                className="w-10 h-10 rounded-full border-2 border-white object-cover flex-shrink-0 bg-white"
+                onError={(e) => {
+                  // 如果图片加载失败，使用默认 SVG
+                  const target = e.target as HTMLImageElement;
+                  if (!target.src.includes('ashley-logo.svg')) {
+                    target.src = '/ashley-logo.svg';
+                  }
+                }}
               />
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="font-semibold text-sm truncate">{video.author}</div>
-              {showFollowButton && video.authorId && video.authorId.trim() !== '' && (
-                <button 
-                  onClick={handleFollow}
-                  className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 transition-colors whitespace-nowrap ${
-                    isFollowing 
-                      ? 'bg-zinc-700 text-white hover:bg-zinc-600' 
-                      : 'bg-white text-black hover:bg-white/90'
-                  }`}
-                >
-                  {isFollowing ? (language === 'zh' ? '已关注' : 'Following') : (language === 'zh' ? '关注' : 'Follow')}
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="font-semibold text-sm truncate">{video.author}</div>
+                {showFollowButton && video.authorId && video.authorId.trim() !== '' && (
+                  <button 
+                    onClick={handleFollow}
+                    className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 transition-colors whitespace-nowrap ${
+                      isFollowing 
+                        ? 'bg-zinc-700 text-white hover:bg-zinc-600' 
+                        : 'bg-white text-black hover:bg-white/90'
+                    }`}
+                  >
+                    {isFollowing ? (language === 'zh' ? '已关注' : 'Following') : (language === 'zh' ? '关注' : 'Follow')}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* 视频标题 - 抖音风格：最多2行 */}
-          <p className="text-sm leading-relaxed line-clamp-2 pr-16">{language === 'zh' ? video.title : video.titleEn}</p>
+            {/* 视频标题 - 抖音风格：最多2行 */}
+            <p className="text-sm leading-relaxed line-clamp-2 pr-16">{language === 'zh' ? video.title : video.titleEn}</p>
+          </div>
         </div>
+      </div>
+
+      {/* 底部信息区域 - 抖音风格：固定在底部导航上方（保留用于其他信息） */}
+      <div className="absolute bottom-20 left-0 right-0 z-10 pb-4 px-4">
+        {/* 预留空间，可用于显示其他信息 */}
       </div>
     </div>
   );

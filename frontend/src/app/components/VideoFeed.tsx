@@ -70,13 +70,16 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
       authorName = language === 'zh' ? '爱室丽人力中心' : 'Ashley HR Center';
     }
 
+    // 默认头像：Ashley HR Center logo
+    const defaultAvatar = '/ashley-logo.svg';
+    
     return {
       id: leanCloudVideo.id,
       title: leanCloudVideo.title,
       titleEn: leanCloudVideo.titleEn || '',
       author: authorName,
       authorId: leanCloudVideo.author?.id || '',
-      avatar: leanCloudVideo.author?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop',
+      avatar: leanCloudVideo.author?.avatar || defaultAvatar,
       thumbnail: leanCloudVideo.coverUrl,
       videoUrl: leanCloudVideo.videoUrl, // 中文视频URL
       videoUrlEn: leanCloudVideo.videoUrlEn || null, // 英文视频URL
