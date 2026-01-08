@@ -1213,9 +1213,10 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       
       // 使用精品模型（ModelType: 1）- 大模型音色
       const modelType = 1; // 使用精品模型（大模型音色）
+      // 按照腾讯云API文档格式设置参数
       const longTextParams = {
         Text: text,
-        ProjectId: 0, // 项目ID，0表示默认项目
+        ProjectId: 0, // 项目ID，0表示默认项目（如果资源包绑定到特定项目，请修改为对应的ProjectId）
         ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
         Volume: 0, // 音量：范围[-10, 10]，0为正常音量
         Codec: 'mp3', // 音频格式：mp3、pcm
@@ -1224,6 +1225,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         PrimaryLanguage: isEnglish ? 2 : 1, // 主语言：1-中文，2-英文
         Speed: 0 // 语速：范围[-2, 2]，0为正常语速
       };
+      console.log('📋 CreateTtsTask 请求参数:', JSON.stringify(longTextParams, null, 2));
       console.log(`🔧 使用模型类型: ${modelType} (精品模型-大模型音色，支持长文本语音合成)`);
       
       // 创建长文本语音合成任务
