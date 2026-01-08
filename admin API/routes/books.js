@@ -3346,6 +3346,114 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     await fs.writeFile(tempAudioPath, audioBuffer2);
     console.log('✅ 英文音频下载完成');
     
+    // 获取视频和音频时长，判断是否需要重复拼接视频
+    console.log('📊 检查视频和音频时长...');
+    const videoDuration = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(tempVideoPath, (err, metadata) => {
+        if (err) {
+          console.error('❌ 获取视频时长失败:', err);
+          reject(err);
+        } else {
+          const duration = metadata.format.duration || 0;
+          console.log('📹 中文视频时长:', duration, '秒');
+          resolve(duration);
+        }
+      });
+    });
+    
+    const audioDuration = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(tempAudioPath, (err, metadata) => {
+        if (err) {
+          console.error('❌ 获取音频时长失败:', err);
+          reject(err);
+        } else {
+          const duration = metadata.format.duration || 0;
+          console.log('🎵 英文音频时长:', duration, '秒');
+          resolve(duration);
+        }
+      });
+    });
+    
+    // 如果英文音频时长 > 中文视频时长，需要重复拼接视频
+    let finalVideoPath = tempVideoPath;
+    if (audioDuration > videoDuration) {
+      console.log(`⚠️ 英文音频时长(${audioDuration}秒) > 中文视频时长(${videoDuration}秒)，需要重复拼接视频`);
+      const repeatCount = Math.ceil(audioDuration / videoDuration);
+      console.log(`🔄 需要重复 ${repeatCount} 次视频`);
+      
+      // 创建视频列表文件用于concat
+      const concatListPath = path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`);
+      const concatListContent = Array(repeatCount).fill(`file '${tempVideoPath.replace(/'/g, "\\'")}'`).join('\n');
+      await fs.writeFile(concatListPath, concatListContent);
+      console.log('📝 创建视频拼接列表文件:', concatListPath);
+      
+      // 拼接重复的视频
+      const concatenatedVideoPath = path.join(tempDir, `concatenated_video_${contentId}_${timestamp}.mp4`);
+      await new Promise((resolve, reject) => {
+        let timeoutId = null;
+        const timeout = 300000; // 5分钟超时
+        
+        const concatProcess = ffmpeg()
+          .input(concatListPath)
+          .inputOptions(['-f', 'concat', '-safe', '0'])
+          .outputOptions([
+            '-c:v copy', // 复制视频流
+            '-c:a copy'  // 复制音频流（如果有）
+          ])
+          .output(concatenatedVideoPath)
+          .on('start', (commandLine) => {
+            console.log('🎬 FFmpeg拼接命令:', commandLine);
+            timeoutId = setTimeout(() => {
+              console.error('❌ 视频拼接超时（5分钟）');
+              concatProcess.kill('SIGKILL');
+              reject(new Error('视频拼接超时，请重试'));
+            }, timeout);
+          })
+          .on('end', () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            console.log('✅ 视频拼接完成');
+            resolve(null);
+          })
+          .on('error', (err) => {
+            if (timeoutId) clearTimeout(timeoutId);
+            console.error('❌ FFmpeg拼接失败:', err);
+            // 如果copy失败，尝试重新编码
+            if (err.message && err.message.includes('copy')) {
+              console.log('⚠️ 视频流复制失败，尝试重新编码拼接...');
+              const fallbackProcess = ffmpeg()
+                .input(concatListPath)
+                .inputOptions(['-f', 'concat', '-safe', '0'])
+                .outputOptions([
+                  '-c:v libx264',
+                  '-preset ultrafast',
+                  '-crf 23',
+                  '-pix_fmt yuv420p',
+                  '-s 720x1280',
+                  '-aspect 9:16'
+                ])
+                .output(concatenatedVideoPath)
+                .on('end', () => {
+                  console.log('✅ 视频拼接完成（使用重新编码）');
+                  resolve(null);
+                })
+                .on('error', (fallbackErr) => {
+                  console.error('❌ 重新编码拼接也失败:', fallbackErr);
+                  reject(fallbackErr);
+                })
+                .run();
+            } else {
+              reject(err);
+            }
+          })
+          .run();
+      });
+      
+      finalVideoPath = concatenatedVideoPath;
+      console.log('✅ 视频重复拼接完成，使用拼接后的视频');
+    } else {
+      console.log('✅ 视频时长足够，无需重复拼接');
+    }
+    
     // 合并视频和音频
     tempOutputPath = path.join(tempDir, `output_en_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频');
@@ -3355,12 +3463,12 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       const timeout = 300000; // 5分钟超时
       
       const ffmpegProcess = ffmpeg()
-        .input(tempVideoPath)
+        .input(finalVideoPath)
         .input(tempAudioPath)
         .outputOptions([
           '-c:v copy', // 复制视频流（输入视频应该已经是9:16）
           '-c:a aac',
-          '-shortest'
+          '-shortest' // 以音频时长为准（如果视频被重复拼接，视频时长应该 >= 音频时长）
         ])
         .output(tempOutputPath)
         .on('start', (commandLine) => {
