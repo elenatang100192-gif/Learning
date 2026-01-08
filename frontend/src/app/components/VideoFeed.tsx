@@ -392,36 +392,19 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
                     )}
                   </div>
                 </div>
-                {/* 视频标题 - 支持置顶显示 */}
-                <div className="relative">
-                  <p 
-                    className="text-sm leading-relaxed pr-20"
-                    style={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {language === 'zh' ? currentVideo.title : currentVideo.titleEn}
-                  </p>
-                  {/* 如果标题过长，显示置顶按钮 */}
-                  {(language === 'zh' ? currentVideo.title : currentVideo.titleEn).length > 50 && (
-                    <button
-                      onClick={() => {
-                        // 滚动到顶部显示完整标题
-                        const titleElement = document.querySelector('[data-video-title]');
-                        if (titleElement) {
-                          titleElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }}
-                      className="absolute top-0 right-0 text-xs text-white/70 hover:text-white underline"
-                    >
-                      {language === 'zh' ? '查看全文' : 'View Full'}
-                    </button>
-                  )}
-                </div>
+                {/* 视频标题 */}
+                <p 
+                  className="text-sm leading-relaxed pr-20"
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {language === 'zh' ? currentVideo.title : currentVideo.titleEn}
+                </p>
               </div>
             </div>
           </div>
