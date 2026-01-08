@@ -1256,6 +1256,21 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
           console.log(`⚠️ 完整错误对象:`, JSON.stringify(error, null, 2));
           console.log(`⚠️ 请求参数:`, JSON.stringify(longTextParams, null, 2));
           console.log(`⚠️ 文本长度: ${text.length} 字符`);
+          console.log(`⚠️ ProjectId: ${longTextParams.ProjectId} (0表示默认项目)`);
+          console.log(`⚠️ VoiceType: ${longTextParams.VoiceType} (${isEnglish ? '英文' : '中文'})`);
+          console.log(`⚠️ PrimaryLanguage: ${longTextParams.PrimaryLanguage} (${isEnglish ? '英文' : '中文'})`);
+          
+          // 提供更详细的诊断信息
+          const diagnosticInfo = {
+            currentModelType: modelType,
+            projectId: longTextParams.ProjectId,
+            voiceType: longTextParams.VoiceType,
+            primaryLanguage: longTextParams.PrimaryLanguage,
+            language: language,
+            textLength: text.length,
+            errorCode: error.Code,
+            errorMessage: error.Message
+          };
           
           return res.status(402).json({
             success: false,
@@ -1263,8 +1278,15 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
             error: error.Message || '资源包配额已用完',
             code: error.Code,
             originalError: error,
-            currentModelType: modelType,
-            suggestion: '请检查腾讯云控制台：\n1. 是否购买了"长文本语音合成-大模型音色-预付费包-50万字符"资源包\n2. 资源包是否已正确绑定到项目\n3. 资源包配额是否真的已用完\n访问地址：https://console.cloud.tencent.com/tts'
+            diagnosticInfo: diagnosticInfo,
+            troubleshooting: {
+              step1: '检查资源包类型：确保购买的是"长文本语音合成-精品模型-预付费包"（ModelType: 1）',
+              step2: '检查ProjectId：当前使用 ProjectId: 0（默认项目），如果您的资源包绑定到特定项目，请修改代码中的 ProjectId',
+              step3: '检查资源包状态：登录腾讯云控制台，查看资源包是否已生效（充值后可能需要等待几分钟）',
+              step4: '检查资源包绑定：确保资源包已绑定到正确的项目（ProjectId: 0 表示默认项目）',
+              step5: '检查资源包配额：确认资源包配额是否真的已用完（查看控制台中的使用量）'
+            },
+            suggestion: '请检查腾讯云控制台：\n1. 是否购买了"长文本语音合成-精品模型-预付费包"（ModelType: 1）\n2. 资源包是否已正确绑定到项目（当前使用 ProjectId: 0）\n3. 资源包是否已生效（充值后可能需要等待几分钟）\n4. 资源包配额是否真的已用完\n访问地址：https://console.cloud.tencent.com/tts'
           });
         }
         
