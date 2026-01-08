@@ -23,8 +23,7 @@ AV.Cloud.useMasterKey();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 中间件配置
-app.use(helmet());
+// 中间件配置（CORS 必须在 helmet 之前）
 app.use(compression());
 app.use(morgan('combined'));
 
@@ -83,6 +82,13 @@ app.use(cors({
   maxAge: 86400, // 24小时，减少 preflight 请求
   preflightContinue: false,
   optionsSuccessStatus: 204
+}));
+
+// 配置 helmet（在 CORS 之后，避免影响 CORS preflight 请求）
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false // 暂时禁用 CSP，避免影响 API 调用
 }));
 
 // 请求体解析
