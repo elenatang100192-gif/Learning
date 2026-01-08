@@ -1211,12 +1211,12 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     if (useLongTextAPI) {
       console.log('📝 使用长文本语音合成API（CreateTtsTask）-精品模型（大模型音色）');
       
-      // 使用精品模型（ModelType: 2）- 大模型音色
-      const modelType = 2; // 使用精品模型（大模型音色）
+      // 使用精品模型（ModelType: 1）- 大模型音色
+      const modelType = 1; // 使用精品模型（大模型音色）
       const longTextParams = {
         Text: text,
         ProjectId: 0, // 项目ID，0表示默认项目
-        ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（大模型音色）
+        ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
         Volume: 0, // 音量：范围[-10, 10]，0为正常音量
         Codec: 'mp3', // 音频格式：mp3、pcm
         VoiceType: voiceType, // 根据语言选择音色类型：中文601013，英文301001
@@ -3215,7 +3215,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       const responseData = await tencentTtsClient.TextToVoice({
         Text: audioText,
         SessionId: `session_${contentId}_${Date.now()}`,
-        ModelType: 2, // 精品模型（大模型音色）
+        ModelType: 1, // 精品模型（大模型音色）
         VoiceType: voiceType,
         Volume: 0,
         Speed: 0,
