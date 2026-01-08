@@ -1341,7 +1341,6 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     
     // 处理音频数据：CreateTtsTask API返回的是URL
     let buffer;
-        const modelType = 2; // 统一使用精品模型（大模型音色）
         const params = {
           Text: text,
           SessionId: `session_${contentId}_${Date.now()}`, // 唯一的会话标识符
