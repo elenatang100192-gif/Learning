@@ -1195,7 +1195,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     // 中文音色：601013（长文本语音合成专用音色），1001-智逍遥（亲和女声），1002-智聆（亲和男声），1003-智言（亲和女声），1004-智娜（亲和女声）
     // 英文音色：1005-智聆（亲和男声），1006-智言（亲和女声），1007-智娜（亲和女声），1009-WeWinny
     const voiceType = isEnglish ? 1009 : 601013; // 英文使用1009（WeWinny），中文使用601013（长文本语音合成专用音色）
-    console.log(`🎤 选择音色类型: ${voiceType} (${isEnglish ? '英文-WeWinny' : '中文-智逍遥'})`);
+    console.log(`🎤 选择音色类型: ${voiceType} (${isEnglish ? '英文-WeWinny' : '中文-长文本语音合成专用音色'})`);
     console.log(`📝 生成${isEnglish ? '英文' : '中文'}音频，文本长度: ${text.length}，内容预览: ${text.substring(0, 100)}...`);
     
     // 统一使用长文本API（CreateTtsTask），支持大模型音色
