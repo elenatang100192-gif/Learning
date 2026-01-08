@@ -176,5 +176,84 @@ fetch('https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api/u
 
 ---
 
+## 问题：生成视频时无法连接到后端服务器
+
+### 错误信息
+```
+❌ 生成无声视频API调用失败: Error: 无法连接到后端服务器 (https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api)
+```
+
+### 排查步骤
+
+#### 1. 检查后端服务是否运行
+
+**访问健康检查端点**：
+```
+https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api/health
+```
+
+**预期结果**：
+- ✅ 成功：返回 `{"status":"OK","timestamp":"...","uptime":...}`
+- ❌ 失败：无法访问或返回错误
+
+#### 2. 检查 CORS 配置
+
+确保后端服务已重新部署，CORS 配置已更新：
+- CloudBase 域名应该被允许
+- 检查服务日志中的 CORS 检查信息
+
+#### 3. 检查环境变量配置
+
+确保后台管理界面在 CloudBase 静态网站托管中配置了正确的环境变量：
+
+```
+VITE_API_BASE_URL=https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api
+```
+
+**⚠️ 重要**：
+- `VITE_API_BASE_URL` 必须以 `/api` 结尾
+- 确保环境变量已正确设置
+- 修改环境变量后需要重新部署前端应用
+
+#### 4. 检查网络连接
+
+在浏览器控制台测试 API 连接：
+
+```javascript
+// 测试健康检查
+fetch('https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api/health')
+  .then(res => res.json())
+  .then(data => console.log('✅ 后端服务正常:', data))
+  .catch(err => console.error('❌ 后端服务异常:', err));
+
+// 测试视频生成端点（需要认证）
+fetch('https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api/books/content/test-id/generate-silent-video', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer your-token'
+  }
+})
+  .then(res => res.json())
+  .then(data => console.log('✅ API 请求成功:', data))
+  .catch(err => console.error('❌ API 请求失败:', err));
+```
+
+#### 5. 检查服务日志
+
+在 CloudBase Run 服务日志中查找：
+- CORS 检查日志
+- API 请求日志
+- 错误信息
+
+**常见日志**：
+```
+🌐 CORS: Checking origin: https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com
+✅ CORS: Allowing CloudBase origin: https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com
+🌐 API CALL: POST /api/books/content/xxx/generate-silent-video
+```
+
+---
+
 **最后更新**: 2026-01-07
 

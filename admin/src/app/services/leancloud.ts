@@ -3,10 +3,10 @@ import AV from 'leancloud-storage';
 // 后端API配置（用于某些API调用，支持环境变量）
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
-  // 统一的API请求函数
-  const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
-    const url = `${API_BASE_URL}${endpoint}`;
-    const isFormData = options.body instanceof FormData;
+// 统一的API请求函数
+const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const isFormData = options.body instanceof FormData;
     
     // 对于视频生成、AI提取等长时间操作，设置更长的超时时间
     const isLongRunningOperation = 
@@ -15,25 +15,25 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001
       endpoint.includes('generate-english-video') || // 英文视频生成也需要更长时间
       endpoint.includes('/extract'); // AI提取也需要更长时间
     const timeout = isLongRunningOperation ? 15 * 60 * 1000 : 30000; // 长时间操作15分钟，其他30秒
-    
-    const config: RequestInit = {
-      headers: {
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-        ...options.headers,
-      },
-      ...options,
+  
+  const config: RequestInit = {
+    headers: {
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      ...options.headers,
+    },
+    ...options,
+  };
+
+  // 添加认证token（如果存在）
+  const token = localStorage.getItem('sessionToken');
+  if (token) {
+    config.headers = {
+      ...config.headers,
+      'Authorization': `Bearer ${token}`,
     };
+  }
 
-    // 添加认证token（如果存在）
-    const token = localStorage.getItem('sessionToken');
-    if (token) {
-      config.headers = {
-        ...config.headers,
-        'Authorization': `Bearer ${token}`,
-      };
-    }
-
-    try {
+  try {
       // 使用AbortController实现超时控制
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
