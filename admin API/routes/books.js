@@ -1344,46 +1344,45 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     
     // CreateTtsTask API返回的是URL，需要下载
     let audioUrl = responseData.Audio;
-      if (!audioUrl) {
-        throw new Error('腾讯云API响应中未找到音频URL');
-      }
-      
-      // 验证和修复URL格式
-      if (typeof audioUrl !== 'string') {
-        throw new Error(`音频URL格式错误: ${typeof audioUrl}`);
-      }
-      
-      // 如果URL不是以http://或https://开头，尝试添加https://
-      if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
-        // 如果URL以//开头，添加https:
-        if (audioUrl.startsWith('//')) {
-          audioUrl = 'https:' + audioUrl;
-        } else {
-          // 否则尝试添加https://
-          audioUrl = 'https://' + audioUrl;
-        }
-      }
-      
-      // 验证URL格式
-      try {
-        new URL(audioUrl);
-      } catch (urlError) {
-        throw new Error(`音频URL格式无效: ${audioUrl}, 错误: ${urlError.message}`);
-      }
-      
-      console.log('✅ 从响应中获取音频URL:', audioUrl);
-      
-      // 下载音频文件
-      const audioResponse = await fetch(audioUrl);
-      if (!audioResponse.ok) {
-        throw new Error(`下载音频文件失败: ${audioResponse.statusText}`);
-      }
-      
-      const audioBlob = await audioResponse.blob();
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-      console.log('✅ 音频文件下载完成，Buffer长度:', buffer.length);
+    if (!audioUrl) {
+      throw new Error('腾讯云API响应中未找到音频URL');
     }
+    
+    // 验证和修复URL格式
+    if (typeof audioUrl !== 'string') {
+      throw new Error(`音频URL格式错误: ${typeof audioUrl}`);
+    }
+    
+    // 如果URL不是以http://或https://开头，尝试添加https://
+    if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
+      // 如果URL以//开头，添加https:
+      if (audioUrl.startsWith('//')) {
+        audioUrl = 'https:' + audioUrl;
+      } else {
+        // 否则尝试添加https://
+        audioUrl = 'https://' + audioUrl;
+      }
+    }
+    
+    // 验证URL格式
+    try {
+      new URL(audioUrl);
+    } catch (urlError) {
+      throw new Error(`音频URL格式无效: ${audioUrl}, 错误: ${urlError.message}`);
+    }
+    
+    console.log('✅ 从响应中获取音频URL:', audioUrl);
+    
+    // 下载音频文件
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) {
+      throw new Error(`下载音频文件失败: ${audioResponse.statusText}`);
+    }
+    
+    const audioBlob = await audioResponse.blob();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    buffer = Buffer.from(arrayBuffer);
+    console.log('✅ 音频文件下载完成，Buffer长度:', buffer.length);
     
     // 将音频文件上传到LeanCloud
     const fileName = `audio_${contentId}_${Date.now()}.mp3`;
