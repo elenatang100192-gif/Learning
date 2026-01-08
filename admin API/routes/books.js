@@ -3453,6 +3453,92 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       
       finalVideoPath = concatenatedVideoPath;
       console.log('✅ 视频重复拼接完成，使用拼接后的视频');
+      
+      // 验证拼接后的视频时长是否 >= 音频时长
+      const concatenatedVideoDuration = await new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(concatenatedVideoPath, (err, metadata) => {
+          if (err) {
+            console.error('❌ 获取拼接后视频时长失败:', err);
+            reject(err);
+          } else {
+            const duration = metadata.format.duration || 0;
+            console.log('📹 拼接后视频时长:', duration, '秒');
+            resolve(duration);
+          }
+        });
+      });
+      
+      // 如果拼接后的视频时长仍然 < 音频时长，需要继续拼接
+      if (concatenatedVideoDuration < audioDuration) {
+        console.log(`⚠️ 拼接后视频时长(${concatenatedVideoDuration}秒) < 音频时长(${audioDuration}秒)，需要继续拼接`);
+        const additionalRepeatCount = Math.ceil((audioDuration - concatenatedVideoDuration) / videoDuration) + 1; // 多拼接一些，确保足够
+        console.log(`🔄 需要额外重复 ${additionalRepeatCount} 次视频`);
+        
+        // 创建新的concat列表，包含原始视频和已拼接的视频
+        const additionalConcatListPath = path.join(tempDir, `concat_list_additional_${contentId}_${timestamp}.txt`);
+        const additionalConcatContent = [
+          `file '${concatenatedVideoPath.replace(/'/g, "\\'")}'`, // 先包含已拼接的视频
+          ...Array(additionalRepeatCount).fill(`file '${tempVideoPath.replace(/'/g, "\\'")}'`) // 再添加额外的重复
+        ].join('\n');
+        await fs.writeFile(additionalConcatListPath, additionalConcatContent);
+        console.log('📝 创建额外拼接列表文件:', additionalConcatListPath);
+        
+        // 再次拼接
+        const finalConcatenatedVideoPath = path.join(tempDir, `final_concatenated_video_${contentId}_${timestamp}.mp4`);
+        await new Promise((resolve, reject) => {
+          let timeoutId = null;
+          const timeout = 300000;
+          
+          const additionalConcatProcess = ffmpeg()
+            .input(additionalConcatListPath)
+            .inputOptions(['-f', 'concat', '-safe', '0'])
+            .outputOptions([
+              '-c:v copy',
+              '-c:a copy'
+            ])
+            .output(finalConcatenatedVideoPath)
+            .on('start', (commandLine) => {
+              console.log('🎬 FFmpeg额外拼接命令:', commandLine);
+              timeoutId = setTimeout(() => {
+                console.error('❌ 额外视频拼接超时（5分钟）');
+                additionalConcatProcess.kill('SIGKILL');
+                reject(new Error('额外视频拼接超时，请重试'));
+              }, timeout);
+            })
+            .on('end', () => {
+              if (timeoutId) clearTimeout(timeoutId);
+              console.log('✅ 额外视频拼接完成');
+              resolve(null);
+            })
+            .on('error', (err) => {
+              if (timeoutId) clearTimeout(timeoutId);
+              console.error('❌ FFmpeg额外拼接失败:', err);
+              reject(err);
+            })
+            .run();
+        });
+        
+        // 更新最终视频路径和清理列表
+        if (concatListPath) {
+          try {
+            await fs.unlink(concatListPath);
+          } catch (e) {
+            console.warn('⚠️ 清理旧concat列表文件失败:', e.message);
+          }
+        }
+        try {
+          await fs.unlink(concatenatedVideoPath);
+        } catch (e) {
+          console.warn('⚠️ 清理中间拼接视频失败:', e.message);
+        }
+        
+        concatenatedVideoPath = finalConcatenatedVideoPath;
+        concatListPath = additionalConcatListPath;
+        finalVideoPath = finalConcatenatedVideoPath;
+        console.log('✅ 最终视频拼接完成，确保视频时长 >= 音频时长');
+      } else {
+        console.log('✅ 拼接后视频时长足够，无需额外拼接');
+      }
     } else {
       console.log('✅ 视频时长足够，无需重复拼接');
     }
@@ -3460,6 +3546,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     // 合并视频和音频
     tempOutputPath = path.join(tempDir, `output_en_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频');
+    console.log(`📊 最终视频路径: ${finalVideoPath}`);
+    console.log(`📊 音频路径: ${tempAudioPath}`);
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
@@ -3471,7 +3559,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         .outputOptions([
           '-c:v copy', // 复制视频流（输入视频应该已经是9:16）
           '-c:a aac',
-          '-shortest' // 以音频时长为准（如果视频被重复拼接，视频时长应该 >= 音频时长）
+          '-shortest' // 以音频时长为准（视频已被重复拼接，时长应该 >= 音频时长）
         ])
         .output(tempOutputPath)
         .on('start', (commandLine) => {
