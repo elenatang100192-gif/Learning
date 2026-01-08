@@ -218,13 +218,23 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       </div>
 
-      {/* 底部作者信息区域 - 遮罩从底部导航的上边框开始，不遮挡导航菜单 */}
-      {/* 底部导航菜单高度 h-16 (64px)，遮罩从该位置开始向上渐变，确保不遮挡导航菜单 */}
-      <div className="absolute bottom-16 left-0 right-0 z-10 pb-2 px-4 pointer-events-none">
-        {/* 背景渐变，从底部导航上边框开始，确保文字可见，但不遮挡导航菜单 */}
-        <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4">
+      {/* 作者信息和视频标题 - 显示在顶部导航和底部导航之间 */}
+      {/* 顶部导航高度约64px，底部导航高度64px，内容区域在两者之间 */}
+      <div 
+        className="absolute left-0 right-0 z-10 px-4 pointer-events-none"
+        style={{
+          top: '64px', // 顶部导航菜单下方
+          bottom: '64px', // 底部导航菜单上方
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          paddingBottom: '8px',
+        }}
+      >
+        {/* 背景渐变，从底部向上渐变，确保文字可见 */}
+        <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4 rounded-t-lg">
           {/* 视频信息 - 抖音风格：左侧作者信息 */}
-          <div className="text-white">
+          <div className="text-white pointer-events-auto">
             <div className="flex items-center gap-3 mb-2">
               <img
                 src={video.avatar}
