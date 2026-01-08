@@ -226,10 +226,11 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
       </div>
 
       {/* 作者信息和视频标题 - 显示在顶部导航和底部导航之间 */}
+      {/* 使用 fixed 定位确保即使滚动时位置也不变 */}
       {/* 顶部导航高度约64px，底部导航高度64px + safe-area-bottom (约34px) = 约98px */}
       {/* 增加额外间距确保在 iPhone 14 Pro Max 上不被遮挡 */}
       <div 
-        className="absolute left-0 right-0 z-10 px-4 pointer-events-none"
+        className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
         style={{
           top: '64px', // 顶部导航菜单下方
           // 底部导航菜单：h-16 (64px) + safe-area-bottom padding (env(safe-area-inset-bottom))
