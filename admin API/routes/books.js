@@ -3055,6 +3055,9 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
+  let finalVideoPath = null; // 最终使用的视频路径（可能是原始视频或拼接后的视频）
+  let concatenatedVideoPath = null; // 拼接后的视频路径
+  let concatListPath = null; // concat列表文件路径
   
   try {
     const { contentId } = req.params;
@@ -3586,7 +3589,13 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.error('❌ 错误堆栈:', error.stack);
     
     // 清理临时文件
-    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath].filter(Boolean);
+    const cleanupFiles = [
+      tempVideoPath, 
+      tempAudioPath, 
+      tempOutputPath,
+      concatenatedVideoPath, // 拼接后的视频
+      concatListPath // concat列表文件
+    ].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
         await fs.unlink(filePath);
