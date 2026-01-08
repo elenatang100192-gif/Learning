@@ -1673,6 +1673,9 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
       });
     }
 
+    // 判断是否是中文视频（如果存在中文音频URL，则为中文视频）
+    const isChineseVideo = !!contentObj.get('audioUrl');
+
     // 更新状态为生成中
     contentObj.set('videoStatus', 'generating');
     await contentObj.save();
@@ -1795,7 +1798,9 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
       // 根据API文档，使用 --ratio 9:16 --dur 参数格式
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      const promptWithParams = `${currentText} --ratio 9:16 --dur ${videoSegmentDuration}`;
+      // 如果是中文视频，添加漫画风格参数
+      const styleParam = isChineseVideo ? ' --style comic' : '';
+      const promptWithParams = `${currentText} --ratio 9:16 --dur ${videoSegmentDuration}${styleParam}`;
       
       const textToVideoRequestBody = {
         model: DOUBAO_MODEL_ID,
@@ -2131,7 +2136,7 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
         )
       ]);
       const uploadTime = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
-      const silentVideoUrl = silentVideoFile.url();
+    const silentVideoUrl = silentVideoFile.url();
       console.log(`✅ 无声视频上传成功，耗时: ${uploadTime}秒，URL:`, silentVideoUrl);
     } catch (error) {
       console.error('❌ 无声视频上传失败:', error);
@@ -2610,6 +2615,9 @@ async function generateVideoWithTextToVideo(req, res, contentId, audioUrl) {
       'Authorization': `Bearer ${DOUBAO_API_KEY}`
     };
     
+    // 判断是否是中文视频（如果存在中文音频URL，则为中文视频）
+    const isChineseVideo = !!contentObj.get('audioUrl');
+    
     // 辅助函数：生成单段视频
     const generateVideoSegment = async (segmentText, segmentIndex) => {
       // 根据Doubao API格式构建请求体
@@ -2617,7 +2625,9 @@ async function generateVideoWithTextToVideo(req, res, contentId, audioUrl) {
       // 参数格式：--ratio 9:16 --dur {duration}
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      const promptWithParams = `${segmentText} --ratio 9:16 --dur ${videoSegmentDuration}`;
+      // 如果是中文视频，添加漫画风格参数
+      const styleParam = isChineseVideo ? ' --style comic' : '';
+      const promptWithParams = `${segmentText} --ratio 9:16 --dur ${videoSegmentDuration}${styleParam}`;
       
       const textToVideoRequestBody = {
         model: DOUBAO_MODEL_ID, // Doubao模型ID或Endpoint ID
@@ -3576,7 +3586,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         )
       ]);
       const uploadTime = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
-      const finalVideoUrl = videoFile.url();
+    const finalVideoUrl = videoFile.url();
       console.log(`✅ 英文视频上传成功，耗时: ${uploadTime}秒，URL:`, finalVideoUrl);
     } catch (error) {
       console.error('❌ 英文视频上传失败:', error);
