@@ -3560,6 +3560,27 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.log(`📊 最终视频路径: ${finalVideoPath}`);
     console.log(`📊 音频路径: ${tempAudioPath}`);
     
+    // 再次验证最终视频时长，确保 >= 音频时长
+    const finalVideoDurationCheck = await new Promise((resolve) => {
+      ffmpeg.ffprobe(finalVideoPath, (err, metadata) => {
+        if (err) {
+          console.warn('⚠️ 获取最终视频时长失败:', err.message);
+          resolve(null);
+        } else {
+          const duration = metadata.format.duration || 0;
+          console.log('📹 最终视频时长（合并前）:', duration, '秒');
+          resolve(duration);
+        }
+      });
+    });
+    
+    if (finalVideoDurationCheck !== null && finalVideoDurationCheck < audioDuration) {
+      console.error(`❌ 最终视频时长(${finalVideoDurationCheck}秒) < 音频时长(${audioDuration}秒)，视频拼接可能失败！`);
+      throw new Error(`视频拼接失败：最终视频时长(${finalVideoDurationCheck}秒)小于音频时长(${audioDuration}秒)`);
+    }
+    
+    console.log(`✅ 视频时长(${finalVideoDurationCheck || '未知'}秒) >= 音频时长(${audioDuration}秒)，可以合并`);
+    
     await new Promise((resolve, reject) => {
       let timeoutId = null;
       const timeout = 300000; // 5分钟超时
@@ -3570,7 +3591,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         .outputOptions([
           '-c:v copy', // 复制视频流（输入视频应该已经是9:16）
           '-c:a aac',
-          '-shortest' // 以音频时长为准（视频已被重复拼接，时长应该 >= 音频时长）
+          '-t', audioDuration.toString() // 明确指定输出时长为音频时长（秒）
         ])
         .output(tempOutputPath)
         .on('start', (commandLine) => {
