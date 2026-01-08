@@ -1046,8 +1046,8 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       });
     }
 
-    // 统一使用腾讯云长文本语音合成（基础模型）
-    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 1（基础模型）
+    // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
+    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 2（精品模型-大模型音色）
     console.log(`🔍 检测语言参数: language="${language}", type=${typeof language}`);
     console.log(`🔍 language === 'en': ${language === 'en'}`);
     console.log(`🔍 language.toLowerCase() === 'en': ${String(language).toLowerCase() === 'en'}`);
@@ -1056,7 +1056,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     const isEnglish = String(language).toLowerCase() === 'en';
     console.log(`🔍 isEnglish: ${isEnglish}`);
     
-    // 统一使用腾讯云TTS长文本语音合成（基础模型）
+    // 统一使用腾讯云TTS长文本语音合成（精品模型-大模型音色）
     // 不再区分语言，都使用CreateTtsTask API
     if (false) { // 禁用豆包TTS，统一使用腾讯云TTS
       console.log('🎵 使用豆包语音合成大模型生成英文音频（仅使用豆包API，不限制字符数）');
@@ -1187,13 +1187,13 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       }
     }
     
-    // 统一使用腾讯云长文本语音合成（基础模型）
-    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 1（基础模型）
-    console.log('🔵 ========== 使用腾讯云长文本语音合成（基础模型） ==========');
+    // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
+    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 2（精品模型-大模型音色）
+    console.log('🔵 ========== 使用腾讯云长文本语音合成（精品模型-大模型音色） ==========');
     console.log('🔵 语言:', language);
 
-    // 统一使用腾讯云长文本语音合成（基础模型）
-    console.log('🎵 调用腾讯云长文本语音合成API（基础模型），文本长度:', text.length, '语言:', language);
+    // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
+    console.log('🎵 调用腾讯云长文本语音合成API（精品模型-大模型音色），文本长度:', text.length, '语言:', language);
     
     // 根据语言选择音色类型
     // 中文音色：601013（长文本语音合成专用音色），1001-智逍遥（亲和女声），1002-智聆（亲和男声），1003-智言（亲和女声），1004-智娜（亲和女声）
@@ -1202,18 +1202,18 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     console.log(`🎤 选择音色类型: ${voiceType} (${isEnglish ? '英文-WeWinny' : '中文-长文本语音合成专用音色'})`);
     console.log(`📝 生成${isEnglish ? '英文' : '中文'}音频，文本长度: ${text.length}，内容预览: ${text.substring(0, 100)}...`);
     
-    // 统一使用长文本API（CreateTtsTask），使用基础模型
+    // 统一使用长文本API（CreateTtsTask），使用精品模型（大模型音色）
     let responseData;
     
-    // 强制使用长文本API（CreateTtsTask），使用基础模型
-    const useLongTextAPI = true; // 强制使用CreateTtsTask API（长文本语音合成-基础模型）
+    // 强制使用长文本API（CreateTtsTask），使用精品模型（大模型音色）
+    const useLongTextAPI = true; // 强制使用CreateTtsTask API（长文本语音合成-精品模型-大模型音色）
     
     if (useLongTextAPI) {
-      console.log('📝 使用长文本语音合成API（CreateTtsTask）-优先基础模型');
+      console.log('📝 使用长文本语音合成API（CreateTtsTask）-精品模型（大模型音色）');
       
-      // 优先使用基础模型（ModelType: 1），如果字符数超过限制则切换到精品模型（ModelType: 2）
-      let modelType = 1; // 优先使用基础模型
-      let longTextParams = {
+      // 使用精品模型（ModelType: 2）- 大模型音色
+      const modelType = 2; // 使用精品模型（大模型音色）
+      const longTextParams = {
         Text: text,
         ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（大模型音色）
         VoiceType: voiceType, // 根据语言选择音色类型
@@ -1223,9 +1223,9 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         SampleRate: 16000, // 采样率：16000或8000
         Codec: 'mp3' // 音频格式：mp3、pcm
       };
-      console.log(`🔧 优先使用模型类型: ${modelType} (基础模型，支持长文本语音合成)`);
+      console.log(`🔧 使用模型类型: ${modelType} (精品模型-大模型音色，支持长文本语音合成)`);
       
-      // 创建长文本语音合成任务（先尝试基础模型）
+      // 创建长文本语音合成任务
       responseData = await tencentTtsClient.CreateTtsTask(longTextParams);
       console.log('✅ 腾讯云长文本API响应:', JSON.stringify(responseData, null, 2));
       
@@ -1237,164 +1237,61 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         console.error('❌ 错误消息:', error.Message);
         console.error('❌ 请求参数:', JSON.stringify(longTextParams, null, 2));
         
-        // 检查是否是文本长度限制错误（基础模型可能有字符数限制）
-        const isTextLengthError = error.Code === 'InvalidParameterValue.TextTooLong' ||
-                                  error.Code === 'UnsupportedOperation.TextTooLong' ||
-                                  (error.Message && (
-                                    error.Message.includes('文本过长') ||
-                                    error.Message.includes('Text too long') ||
-                                    error.Message.includes('字符数') ||
-                                    error.Message.includes('character') ||
-                                    error.Message.includes('length')
-                                  ));
+        // 特殊处理资源包配额用完错误
+        const isResourcePackError = error.Code === 'UnsupportedOperation.PkgExhausted' || 
+                                    error.Code === 'ResourceInsufficient' ||
+                                    (error.Message && (
+                                      error.Message.includes('资源包') || 
+                                      error.Message.includes('resource pack') ||
+                                      error.Message.includes('配额') ||
+                                      error.Message.includes('quota') ||
+                                      error.Message.includes('exhausted') ||
+                                      error.Message.includes('allowance')
+                                    ));
         
-        // 如果是文本长度限制错误，切换到精品模型（ModelType: 2）
-        if (isTextLengthError && modelType === 1) {
-          console.log('⚠️ 基础模型字符数超过限制，切换到精品模型（ModelType: 2）');
-          console.log(`📝 文本长度: ${text.length} 字符`);
+        if (isResourcePackError) {
+          console.log(`⚠️ 检测到资源包相关错误，当前已使用精品模型（大模型音色）（ModelType: ${modelType}）`);
+          console.log(`⚠️ 原始错误代码: ${error.Code}, 错误消息: ${error.Message}`);
+          console.log(`⚠️ 完整错误对象:`, JSON.stringify(error, null, 2));
+          console.log(`⚠️ 请求参数:`, JSON.stringify(longTextParams, null, 2));
+          console.log(`⚠️ 文本长度: ${text.length} 字符`);
           
-          try {
-            // 切换到精品模型（大模型音色）
-            modelType = 2;
-            longTextParams = {
-              ...longTextParams,
-              ModelType: modelType // 切换到精品模型（大模型音色）
-            };
-            console.log(`🔄 使用模型类型: ${modelType} (精品模型-大模型音色，支持更长文本)`);
-            
-            // 使用精品模型重新尝试
-            responseData = await tencentTtsClient.CreateTtsTask(longTextParams);
-            console.log('✅ 精品模型API响应:', JSON.stringify(responseData, null, 2));
-            
-            // 检查精品模型是否也失败
-            if (responseData.Error) {
-              const premiumError = responseData.Error;
-              console.error('❌ 精品模型也失败:', JSON.stringify(premiumError, null, 2));
-              // 继续处理错误（可能是资源包或其他错误）
-              responseData.Error = premiumError;
-            } else {
-              // 精品模型成功，继续处理
-              console.log('✅ 切换到精品模型成功，继续处理...');
-            }
-          } catch (fallbackError) {
-            console.error('❌ 切换到精品模型失败:', fallbackError);
-            // 继续使用原始错误
-          }
-        }
-        
-        // 如果还有错误（包括精品模型失败的情况），继续处理
-        if (responseData.Error) {
-          const error = responseData.Error;
-          
-          // 特殊处理资源包配额用完错误
-          const isResourcePackError = error.Code === 'UnsupportedOperation.PkgExhausted' || 
-                                      error.Code === 'ResourceInsufficient' ||
-                                      (error.Message && (
-                                        error.Message.includes('资源包') || 
-                                        error.Message.includes('resource pack') ||
-                                        error.Message.includes('配额') ||
-                                        error.Message.includes('quota') ||
-                                        error.Message.includes('exhausted') ||
-                                        error.Message.includes('allowance')
-                                      ));
-          
-          if (isResourcePackError) {
-            const currentModel = modelType === 2 ? '精品模型（大模型音色）' : '基础模型';
-            console.log(`⚠️ 检测到资源包相关错误，当前已使用${currentModel}（ModelType: ${modelType}）`);
-            console.log(`⚠️ 原始错误代码: ${error.Code}, 错误消息: ${error.Message}`);
-            console.log(`⚠️ 完整错误对象:`, JSON.stringify(error, null, 2));
-            console.log(`⚠️ 请求参数:`, JSON.stringify(longTextParams, null, 2));
-            console.log(`⚠️ 文本长度: ${text.length} 字符`);
-            
-            // 如果当前使用的是基础模型，尝试切换到精品模型
-            if (modelType === 1) {
-              console.log('🔄 尝试切换到精品模型（ModelType: 2），可能资源包类型不匹配');
-              try {
-                const fallbackModelType = 2;
-                const fallbackParams = {
-                  ...longTextParams,
-                  ModelType: fallbackModelType
-                };
-                console.log(`🔄 使用精品模型重新尝试，参数:`, JSON.stringify(fallbackParams, null, 2));
-                
-                const fallbackResponse = await tencentTtsClient.CreateTtsTask(fallbackParams);
-                console.log('✅ 精品模型API响应:', JSON.stringify(fallbackResponse, null, 2));
-                
-                if (!fallbackResponse.Error) {
-                  // 精品模型成功，更新 responseData 并继续处理
-                  console.log('✅ 切换到精品模型成功，继续处理...');
-                  responseData = fallbackResponse;
-                  modelType = fallbackModelType; // 更新 modelType 变量
-                  // 清除错误标志，跳出错误处理，继续执行后续代码
-                  // 注意：这里不 return，让代码继续执行到后续的 TaskId 处理逻辑
-                } else {
-                  // 精品模型也失败，返回详细错误信息
-                  const premiumError = fallbackResponse.Error;
-                  console.error('❌ 精品模型也失败:', JSON.stringify(premiumError, null, 2));
-                  return res.status(402).json({
-                    success: false,
-                    message: '腾讯云资源包配额问题：基础模型和精品模型都无法使用。请检查资源包类型是否匹配。',
-                    error: `基础模型错误: ${error.Message || '资源包配额已用完'}；精品模型错误: ${premiumError.Message || '资源包配额已用完'}`,
-                    code: error.Code,
-                    originalError: error,
-                    fallbackError: premiumError,
-                    currentModelType: modelType,
-                    fallbackModelType: fallbackModelType,
-                    suggestion: '请检查腾讯云控制台中的资源包类型：\n1. 如果购买了"长文本语音合成-基础模型-预付费包"，请确保使用 ModelType: 1\n2. 如果购买了"长文本语音合成-大模型音色-预付费包-50万字符"，请确保使用 ModelType: 2\n访问地址：https://console.cloud.tencent.com/tts'
-                  });
-                }
-              } catch (fallbackError) {
-                console.error('❌ 切换到精品模型失败:', fallbackError);
-                return res.status(402).json({
-                  success: false,
-                  message: '腾讯云资源包配额已用完或资源包类型不匹配',
-                  error: error.Message || '资源包配额已用完',
-                  code: error.Code,
-                  originalError: error,
-                  fallbackError: fallbackError.message || fallbackError.toString(),
-                  currentModelType: modelType,
-                  suggestion: '请检查腾讯云控制台中的资源包类型是否与代码中使用的 ModelType 匹配。\n访问地址：https://console.cloud.tencent.com/tts'
-                });
-              }
-            } else {
-              // 当前使用的是精品模型，返回错误
-              return res.status(402).json({
-                success: false,
-                message: '腾讯云资源包配额已用完或资源包类型不匹配',
-                error: error.Message || '资源包配额已用完',
-                code: error.Code,
-                originalError: error,
-                currentModelType: modelType,
-                suggestion: '请检查腾讯云控制台：\n1. 是否购买了"长文本语音合成-大模型音色-预付费包-50万字符"资源包\n2. 资源包是否已正确绑定到项目\n3. 资源包配额是否真的已用完\n访问地址：https://console.cloud.tencent.com/tts'
-              });
-            }
-          }
-          
-          // 特殊处理VoiceType参数错误
-          if (error.Message && error.Message.includes('VoiceType')) {
-            console.error(`❌ VoiceType参数错误，当前值: ${voiceType}, 语言: ${language}, ModelType: ${modelType}`);
-            console.error(`❌ 完整错误信息:`, JSON.stringify(error, null, 2));
-            console.error(`❌ 请求参数:`, JSON.stringify(longTextParams, null, 2));
-            return res.status(400).json({
-              success: false,
-              message: `VoiceType参数错误: ${error.Message}`,
-              error: error.Message || JSON.stringify(error),
-              code: error.Code,
-              voiceType: voiceType,
-              language: language,
-              modelType: modelType,
-              suggestion: '请检查VoiceType参数是否正确，英文音色可以尝试：1005（男声）、1006（女声）、1007（女声）'
-            });
-          }
-          
-          return res.status(500).json({
+          return res.status(402).json({
             success: false,
-            message: `腾讯云API错误: ${error.Message || '未知错误'}`,
-            error: error.Message || JSON.stringify(error),
-            code: error.Code
+            message: '腾讯云资源包配额已用完或资源包类型不匹配',
+            error: error.Message || '资源包配额已用完',
+            code: error.Code,
+            originalError: error,
+            currentModelType: modelType,
+            suggestion: '请检查腾讯云控制台：\n1. 是否购买了"长文本语音合成-大模型音色-预付费包-50万字符"资源包\n2. 资源包是否已正确绑定到项目\n3. 资源包配额是否真的已用完\n访问地址：https://console.cloud.tencent.com/tts'
           });
         }
+        
+        // 特殊处理VoiceType参数错误
+        if (error.Message && error.Message.includes('VoiceType')) {
+          console.error(`❌ VoiceType参数错误，当前值: ${voiceType}, 语言: ${language}, ModelType: ${modelType}`);
+          console.error(`❌ 完整错误信息:`, JSON.stringify(error, null, 2));
+          console.error(`❌ 请求参数:`, JSON.stringify(longTextParams, null, 2));
+          return res.status(400).json({
+            success: false,
+            message: `VoiceType参数错误: ${error.Message}`,
+            error: error.Message || JSON.stringify(error),
+            code: error.Code,
+            voiceType: voiceType,
+            language: language,
+            modelType: modelType,
+            suggestion: '请检查VoiceType参数是否正确，英文音色可以尝试：1005（男声）、1006（女声）、1007（女声）'
+          });
+        }
+        
+        return res.status(500).json({
+          success: false,
+          message: `腾讯云API错误: ${error.Message || '未知错误'}`,
+          error: error.Message || JSON.stringify(error),
+          code: error.Code
+        });
       }
+    }
       
       // 长文本API返回TaskId，需要轮询查询结果
       const taskId = responseData.Data?.TaskId;
@@ -1547,8 +1444,8 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         if (shouldUseLongTextAPI || error.message === 'TextTooLong' || (error.code && error.code.includes('TextTooLong'))) {
           console.log('📝 TextToVoice失败，切换到长文本语音合成API（CreateTtsTask）');
           
-          // 使用ModelType: 1（基础模型），支持长文本语音合成
-          const modelType = 1; // 使用基础模型
+          // 使用ModelType: 2（精品模型-大模型音色），支持长文本语音合成
+          const modelType = 2; // 使用精品模型（大模型音色）
           const longTextParams = {
             Text: text,
             ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（大模型音色）
@@ -1559,7 +1456,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
             SampleRate: 16000,
             Codec: 'mp3'
           };
-          console.log(`🔧 切换到长文本API，使用模型类型: ${modelType} (基础模型，支持长文本语音合成)`);
+          console.log(`🔧 切换到长文本API，使用模型类型: ${modelType} (精品模型-大模型音色，支持长文本语音合成)`);
           
           try {
             responseData = await tencentTtsClient.CreateTtsTask(longTextParams);
