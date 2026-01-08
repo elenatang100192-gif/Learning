@@ -8,11 +8,12 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
   const isFormData = options.body instanceof FormData;
     
-    // 对于视频生成、AI提取等长时间操作，设置更长的超时时间
+    // 对于视频生成、AI提取、音频生成等长时间操作，设置更长的超时时间
     const isLongRunningOperation = 
       endpoint.includes('generate-silent-video') || 
       endpoint.includes('generate-video') ||
       endpoint.includes('generate-english-video') || // 英文视频生成也需要更长时间
+      endpoint.includes('generate-audio') || // 音频生成需要轮询查询任务状态，可能需要更长时间
       endpoint.includes('/extract'); // AI提取也需要更长时间
     const timeout = isLongRunningOperation ? 15 * 60 * 1000 : 30000; // 长时间操作15分钟，其他30秒
   
