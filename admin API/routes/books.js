@@ -1339,13 +1339,11 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       responseData = { Audio: audioUrl };
     }
     
-    // 处理音频数据：CreateTtsTask API返回的是URL
+    // 处理音频数据：CreateTtsTask API返回的是URL，需要下载
     let buffer;
     
     // CreateTtsTask API返回的是URL，需要下载
-    {
-      // CreateTtsTask API返回的是URL，需要下载
-      let audioUrl = responseData.Audio;
+    let audioUrl = responseData.Audio;
       if (!audioUrl) {
         throw new Error('腾讯云API响应中未找到音频URL');
       }
