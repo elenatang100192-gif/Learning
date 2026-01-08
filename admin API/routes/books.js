@@ -1229,31 +1229,49 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       // 检查错误
       if (responseData.Error) {
         const error = responseData.Error;
-        console.error('❌ 腾讯云API错误:', error);
+        console.error('❌ 腾讯云API错误:', JSON.stringify(error, null, 2));
+        console.error('❌ 错误代码:', error.Code);
+        console.error('❌ 错误消息:', error.Message);
         console.error('❌ 请求参数:', JSON.stringify(longTextParams, null, 2));
         
         // 特殊处理资源包配额用完错误
-        if (error.Code === 'UnsupportedOperation.PkgExhausted') {
+        // 检查是否是资源包相关的错误（可能是PkgExhausted或其他相关错误代码）
+        const isResourcePackError = error.Code === 'UnsupportedOperation.PkgExhausted' || 
+                                    error.Code === 'ResourceInsufficient' ||
+                                    (error.Message && (
+                                      error.Message.includes('资源包') || 
+                                      error.Message.includes('resource pack') ||
+                                      error.Message.includes('配额') ||
+                                      error.Message.includes('quota') ||
+                                      error.Message.includes('exhausted')
+                                    ));
+        
+        if (isResourcePackError) {
           // 尝试降级到基础模型（ModelType: 1）
-          console.log('⚠️ 大模型音色资源包配额已用完，尝试降级到基础模型（ModelType: 1）');
+          console.log('⚠️ 检测到资源包相关错误，尝试降级到基础模型（ModelType: 1）');
+          console.log(`⚠️ 原始错误代码: ${error.Code}, 错误消息: ${error.Message}`);
           try {
             const fallbackParams = {
               ...longTextParams,
               ModelType: 1 // 降级到基础模型
             };
             console.log('🔄 使用基础模型重新尝试生成音频...');
+            console.log('🔄 降级参数:', JSON.stringify(fallbackParams, null, 2));
             const fallbackResponse = await tencentTtsClient.CreateTtsTask(fallbackParams);
+            console.log('🔄 降级响应:', JSON.stringify(fallbackResponse, null, 2));
             
             if (fallbackResponse.Error) {
-              // 基础模型也失败，返回错误
+              // 基础模型也失败，返回详细错误信息
+              console.error('❌ 基础模型也失败:', JSON.stringify(fallbackResponse.Error, null, 2));
               return res.status(402).json({
                 success: false,
                 message: '腾讯云资源包配额已用完（大模型音色和基础模型都已用完），请前往腾讯云控制台购买资源包或充值',
                 error: error.Message || '资源包配额已用完',
                 code: error.Code,
+                originalError: error,
                 suggestion: '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-大模型音色-预付费包-50万字符"资源包',
                 fallbackAttempted: true,
-                fallbackError: fallbackResponse.Error.Message
+                fallbackError: fallbackResponse.Error
               });
             }
             
@@ -1264,14 +1282,16 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
           } catch (fallbackError) {
             // 降级也失败，返回原始错误
             console.error('❌ 降级到基础模型也失败:', fallbackError);
+            console.error('❌ 降级错误详情:', JSON.stringify(fallbackError, Object.getOwnPropertyNames(fallbackError), 2));
             return res.status(402).json({
               success: false,
               message: '腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值',
               error: error.Message || '资源包配额已用完',
               code: error.Code,
+              originalError: error,
               suggestion: '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-大模型音色-预付费包-50万字符"资源包',
               fallbackAttempted: true,
-              fallbackError: fallbackError.message
+              fallbackError: fallbackError.message || fallbackError.toString()
             });
           }
         }
