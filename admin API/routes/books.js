@@ -1294,23 +1294,79 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
                                         error.Message.includes('resource pack') ||
                                         error.Message.includes('配额') ||
                                         error.Message.includes('quota') ||
-                                        error.Message.includes('exhausted')
+                                        error.Message.includes('exhausted') ||
+                                        error.Message.includes('allowance')
                                       ));
           
           if (isResourcePackError) {
             const currentModel = modelType === 2 ? '精品模型（大模型音色）' : '基础模型';
             console.log(`⚠️ 检测到资源包相关错误，当前已使用${currentModel}（ModelType: ${modelType}）`);
             console.log(`⚠️ 原始错误代码: ${error.Code}, 错误消息: ${error.Message}`);
-            return res.status(402).json({
-              success: false,
-              message: '腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值',
-              error: error.Message || '资源包配额已用完',
-              code: error.Code,
-              originalError: error,
-              suggestion: modelType === 2 
-                ? '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-大模型音色-预付费包-50万字符"资源包'
-                : '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-基础模型-预付费包"资源包'
-            });
+            console.log(`⚠️ 完整错误对象:`, JSON.stringify(error, null, 2));
+            console.log(`⚠️ 请求参数:`, JSON.stringify(longTextParams, null, 2));
+            console.log(`⚠️ 文本长度: ${text.length} 字符`);
+            
+            // 如果当前使用的是基础模型，尝试切换到精品模型
+            if (modelType === 1) {
+              console.log('🔄 尝试切换到精品模型（ModelType: 2），可能资源包类型不匹配');
+              try {
+                const fallbackModelType = 2;
+                const fallbackParams = {
+                  ...longTextParams,
+                  ModelType: fallbackModelType
+                };
+                console.log(`🔄 使用精品模型重新尝试，参数:`, JSON.stringify(fallbackParams, null, 2));
+                
+                const fallbackResponse = await tencentTtsClient.CreateTtsTask(fallbackParams);
+                console.log('✅ 精品模型API响应:', JSON.stringify(fallbackResponse, null, 2));
+                
+                if (!fallbackResponse.Error) {
+                  // 精品模型成功，更新 responseData 并继续处理
+                  console.log('✅ 切换到精品模型成功，继续处理...');
+                  responseData = fallbackResponse;
+                  modelType = fallbackModelType; // 更新 modelType 变量
+                  // 跳出错误处理，继续执行后续代码
+                } else {
+                  // 精品模型也失败，返回详细错误信息
+                  const premiumError = fallbackResponse.Error;
+                  console.error('❌ 精品模型也失败:', JSON.stringify(premiumError, null, 2));
+                  return res.status(402).json({
+                    success: false,
+                    message: '腾讯云资源包配额问题：基础模型和精品模型都无法使用。请检查资源包类型是否匹配。',
+                    error: `基础模型错误: ${error.Message || '资源包配额已用完'}；精品模型错误: ${premiumError.Message || '资源包配额已用完'}`,
+                    code: error.Code,
+                    originalError: error,
+                    fallbackError: premiumError,
+                    currentModelType: modelType,
+                    fallbackModelType: fallbackModelType,
+                    suggestion: '请检查腾讯云控制台中的资源包类型：\n1. 如果购买了"长文本语音合成-基础模型-预付费包"，请确保使用 ModelType: 1\n2. 如果购买了"长文本语音合成-大模型音色-预付费包-50万字符"，请确保使用 ModelType: 2\n访问地址：https://console.cloud.tencent.com/tts'
+                  });
+                }
+              } catch (fallbackError) {
+                console.error('❌ 切换到精品模型失败:', fallbackError);
+                return res.status(402).json({
+                  success: false,
+                  message: '腾讯云资源包配额已用完或资源包类型不匹配',
+                  error: error.Message || '资源包配额已用完',
+                  code: error.Code,
+                  originalError: error,
+                  fallbackError: fallbackError.message || fallbackError.toString(),
+                  currentModelType: modelType,
+                  suggestion: '请检查腾讯云控制台中的资源包类型是否与代码中使用的 ModelType 匹配。\n访问地址：https://console.cloud.tencent.com/tts'
+                });
+              }
+            } else {
+              // 当前使用的是精品模型，返回错误
+              return res.status(402).json({
+                success: false,
+                message: '腾讯云资源包配额已用完或资源包类型不匹配',
+                error: error.Message || '资源包配额已用完',
+                code: error.Code,
+                originalError: error,
+                currentModelType: modelType,
+                suggestion: '请检查腾讯云控制台：\n1. 是否购买了"长文本语音合成-大模型音色-预付费包-50万字符"资源包\n2. 资源包是否已正确绑定到项目\n3. 资源包配额是否真的已用完\n访问地址：https://console.cloud.tencent.com/tts'
+              });
+            }
           }
           
           // 特殊处理VoiceType参数错误
