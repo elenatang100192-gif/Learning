@@ -1312,9 +1312,9 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
                 : '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-基础模型-预付费包"资源包'
             });
           }
-        
-        // 特殊处理VoiceType参数错误
-        if (error.Message && error.Message.includes('VoiceType')) {
+          
+          // 特殊处理VoiceType参数错误
+          if (error.Message && error.Message.includes('VoiceType')) {
           console.error(`❌ VoiceType参数错误，当前值: ${voiceType}, 语言: ${language}, ModelType: ${modelType}`);
           console.error(`❌ 完整错误信息:`, JSON.stringify(error, null, 2));
           console.error(`❌ 请求参数:`, JSON.stringify(longTextParams, null, 2));
