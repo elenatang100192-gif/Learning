@@ -57,20 +57,14 @@ const DOUBAO_MODEL_ID = process.env.DOUBAO_MODEL_ID || 'doubao-seedance-1-5-pro-
 const DOUBAO_TEXT_TO_VIDEO_URL = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 const DOUBAO_TASK_STATUS_URL = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 
-// Doubao语音合成大模型API配置（英文音频生成）
-// 根据README.md配置：
-// APP ID：7616870473
-// Access Token：q8Fx7NRJOVxrl6486XjBKaTL4gqVwqXm
-// Secret Key：d9ryy2RnuxT5wGmmA4EteU24fVRjcYSb
-// 文档：https://www.volcengine.com/docs/6561/1598757?lang=zh
-const DOUBAO_TTS_APP_ID = process.env.DOUBAO_TTS_APP_ID || '7616870473';
-const DOUBAO_TTS_ACCESS_KEY = process.env.DOUBAO_TTS_ACCESS_KEY || process.env.DOUBAO_TTS_ACCESS_TOKEN || 'q8Fx7NRJOVxrl6486XjBKaTL4gqVwqXm';
-const DOUBAO_TTS_SECRET_KEY = process.env.DOUBAO_TTS_SECRET_KEY || 'd9ryy2RnuxT5wGmmA4EteU24fVRjcYSb';
-// 豆包TTS API端点（单向流式HTTP-V3接口）
-const DOUBAO_TTS_API_URL = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
-// 资源ID（字符版资源ID：seed-tts-1.0 或 seed-tts-2.0）
-// 注意：如果seed-tts-2.0未授权，可以尝试使用seed-tts-1.0
-const DOUBAO_TTS_RESOURCE_ID = process.env.DOUBAO_TTS_RESOURCE_ID || 'seed-tts-1.0';
+// 注意：已完全移除豆包TTS相关代码，只使用腾讯云TTS
+// 以下变量定义保留仅用于兼容性，但不会被使用
+// Doubao语音合成大模型API配置（已禁用，不再使用）
+// const DOUBAO_TTS_APP_ID = process.env.DOUBAO_TTS_APP_ID || '7616870473';
+// const DOUBAO_TTS_ACCESS_KEY = process.env.DOUBAO_TTS_ACCESS_KEY || process.env.DOUBAO_TTS_ACCESS_TOKEN || 'q8Fx7NRJOVxrl6486XjBKaTL4gqVwqXm';
+// const DOUBAO_TTS_SECRET_KEY = process.env.DOUBAO_TTS_SECRET_KEY || 'd9ryy2RnuxT5wGmmA4EteU24fVRjcYSb';
+// const DOUBAO_TTS_API_URL = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
+// const DOUBAO_TTS_RESOURCE_ID = process.env.DOUBAO_TTS_RESOURCE_ID || 'seed-tts-1.0';
 
 // 阿里云OSS配置（从环境变量读取，必须配置）
 const OSS_REGION = process.env.OSS_REGION || 'oss-cn-hangzhou';
