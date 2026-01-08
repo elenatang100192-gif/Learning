@@ -225,12 +225,12 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
 
       {/* 作者信息和视频标题 - 显示在顶部导航和底部导航之间 */}
       {/* 顶部导航高度约64px，底部导航高度64px + safe-area-bottom (约34px) = 约98px */}
-      {/* 使用 calc 和 env() 来动态计算安全区域 */}
+      {/* 增加额外间距确保在 iPhone 14 Pro Max 上不被遮挡 */}
       <div 
         className="absolute left-0 right-0 z-10 px-4 pointer-events-none"
         style={{
           top: '64px', // 顶部导航菜单下方
-          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', // 底部导航菜单高度 + 安全区域
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 24px)', // 底部导航菜单高度 + 安全区域 + 额外间距
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-end',
