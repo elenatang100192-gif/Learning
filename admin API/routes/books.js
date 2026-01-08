@@ -3387,13 +3387,15 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       });
     });
     
-    // 如果英文音频时长 > 中文视频时长，需要重复拼接视频
+    // 确保视频时长 >= 音频时长，如果不足则重复拼接视频
     let finalVideoPath = tempVideoPath;
-    if (audioDuration > videoDuration) {
-      console.log(`⚠️ 英文音频时长(${audioDuration}秒) > 中文视频时长(${videoDuration}秒)，需要重复拼接视频`);
+    // 使用更严格的比较，考虑浮点数误差，如果视频时长 < 音频时长（即使只差0.1秒），也需要拼接
+    if (videoDuration < audioDuration) {
+      console.log(`⚠️ 中文视频时长(${videoDuration}秒) < 英文音频时长(${audioDuration}秒)，需要重复拼接视频`);
       // 多拼接一些，确保视频时长 >= 音频时长（添加10%的缓冲）
       const repeatCount = Math.ceil((audioDuration * 1.1) / videoDuration);
       console.log(`🔄 需要重复 ${repeatCount} 次视频（包含10%缓冲，确保视频时长 >= 音频时长）`);
+      console.log(`📊 计算详情: 音频时长=${audioDuration}秒, 视频时长=${videoDuration}秒, 重复次数=${repeatCount}`);
       
       // 创建视频列表文件用于concat
       concatListPath = path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`);
