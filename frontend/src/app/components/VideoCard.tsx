@@ -208,8 +208,13 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
       </div>
 
       {/* 进度条 - 抖音风格：正好在底部导航的上边框，不遮挡导航菜单 */}
-      {/* 底部导航菜单高度 h-16 (64px)，进度条位于其顶部边缘上方 1px，确保不重叠 */}
-      <div className="absolute bottom-[65px] left-0 right-0 z-10 px-4 pointer-events-none">
+      {/* 底部导航菜单高度 h-16 (64px) + safe-area-bottom，进度条位于其顶部边缘上方 */}
+      <div 
+        className="absolute left-0 right-0 z-10 px-4 pointer-events-none"
+        style={{
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 1px)', // 底部导航高度 + 安全区域 + 1px间距
+        }}
+      >
         <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-200"
