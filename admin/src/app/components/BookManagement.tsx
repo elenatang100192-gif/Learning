@@ -164,8 +164,8 @@ export function BookManagement() {
       setIsAddDialogOpen(false);
       
       // 重置表单
-      setNewBook({ title: '', author: '', isbn: '', category: '科技' });
-      setBookFile(null);
+        setNewBook({ title: '', author: '', isbn: '', category: '科技' });
+        setBookFile(null);
       
       // 延迟500ms后刷新数据，确保后端已完全保存
       setTimeout(() => {
@@ -1533,6 +1533,46 @@ export function BookManagement() {
                             Please generate Chinese video first
                           </p>
                         )}
+                        
+                        {/* 生成英文音频按钮 */}
+                        <div className="mt-4 pt-4 border-t">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">Generate English Audio</span>
+                              {content.audioUrlEn && (
+                                <CircleCheck className="h-4 w-4 text-green-600" />
+                              )}
+                              {generatingAudioId === content.id && generatingAudioLanguage === 'en' && (
+                                <Loader className="h-4 w-4 animate-spin text-accent" />
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => handleGenerateAudio(content, 'en')}
+                            size="sm"
+                            variant={content.audioUrlEn ? "outline" : "default"}
+                            disabled={generatingAudioId === content.id || (!content.chapterTitleEn && !content.summaryEn)}
+                            className="w-full"
+                          >
+                            {generatingAudioId === content.id && generatingAudioLanguage === 'en' ? (
+                              <>
+                                <Loader className="mr-2 h-4 w-4 animate-spin" />
+                                Generating...
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="mr-2 h-4 w-4" />
+                                {content.audioUrlEn ? 'Regenerate English Audio' : 'Generate English Audio'}
+                              </>
+                            )}
+                          </Button>
+                          {(!content.chapterTitleEn && !content.summaryEn) && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Please translate content first
+                            </p>
+                          )}
+                        </div>
+                        
                         {content.videoUrlEn && (
                           <div className="mt-4">
                             <div className="text-sm font-medium mb-2">English Video:</div>
