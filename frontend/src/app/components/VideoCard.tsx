@@ -195,13 +195,13 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       )}
 
-      {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方 */}
-      <div className="absolute right-4 bottom-20 z-20">
+      {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方，不遮挡导航菜单 */}
+      <div className="absolute right-4 bottom-28 z-20">
         <VideoInteractions video={video} />
       </div>
 
-      {/* 进度条 - 抖音风格：固定在底部 */}
-      <div className="absolute bottom-16 left-0 right-0 z-20 px-4">
+      {/* 进度条 - 抖音风格：固定在底部导航上方 */}
+      <div className="absolute bottom-24 left-0 right-0 z-20 px-4">
         <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-200"
@@ -210,10 +210,10 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       </div>
 
-      {/* 顶部作者信息区域 - 位于导航菜单下方 */}
-      <div className="absolute top-16 left-0 right-0 z-40 pt-2 px-4">
+      {/* 底部作者信息区域 - 位于底部导航菜单上方 */}
+      <div className="absolute bottom-24 left-0 right-0 z-40 pb-2 px-4">
         {/* 背景渐变，确保文字可见 */}
-        <div className="bg-gradient-to-b from-black/80 via-black/60 to-transparent pb-4 -mx-4 px-4 rounded-b-lg">
+        <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4 rounded-t-lg">
           {/* 视频信息 - 抖音风格：左侧作者信息 */}
           <div className="text-white">
             <div className="flex items-center gap-3 mb-2">
@@ -246,15 +246,10 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
               </div>
             </div>
 
-            {/* 视频标题 - 抖音风格：最多2行 */}
-            <p className="text-sm leading-relaxed line-clamp-2 pr-16">{language === 'zh' ? video.title : video.titleEn}</p>
+            {/* 视频标题 - 抖音风格：最多2行，右侧留出空间给互动按钮 */}
+            <p className="text-sm leading-relaxed line-clamp-2 pr-20">{language === 'zh' ? video.title : video.titleEn}</p>
           </div>
         </div>
-      </div>
-
-      {/* 底部信息区域 - 抖音风格：固定在底部导航上方（保留用于其他信息） */}
-      <div className="absolute bottom-20 left-0 right-0 z-10 pb-4 px-4">
-        {/* 预留空间，可用于显示其他信息 */}
       </div>
     </div>
   );
