@@ -1333,9 +1333,11 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         
+        // 按照腾讯云API文档格式设置查询参数
         const queryParams = {
           TaskId: taskId
         };
+        console.log(`📋 DescribeTtsTaskStatus 请求参数 (${attempt + 1}/${maxAttempts}):`, JSON.stringify(queryParams, null, 2));
         
         const queryResponse = await tencentTtsClient.DescribeTtsTaskStatus(queryParams);
         console.log(`📊 查询任务状态 (${attempt + 1}/${maxAttempts}):`, JSON.stringify(queryResponse, null, 2));
