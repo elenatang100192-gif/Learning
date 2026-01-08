@@ -1211,9 +1211,9 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     if (useLongTextAPI) {
       console.log('📝 使用长文本语音合成API（CreateTtsTask）-大模型音色');
       
-      // 使用CreateTtsTask API（长文本语音合成-大模型音色）
-      // ModelType: 2 表示精品模型（大模型音色），支持长文本语音合成-预付费包-50万字符
-      const modelType = 2; // 使用精品模型（大模型音色）
+      // 使用CreateTtsTask API（长文本语音合成）
+      // ModelType: 1 表示基础模型，支持长文本语音合成
+      const modelType = 1; // 使用基础模型
       const longTextParams = {
         Text: text,
         ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（大模型音色）
@@ -1224,7 +1224,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         SampleRate: 16000, // 采样率：16000或8000
         Codec: 'mp3' // 音频格式：mp3、pcm
       };
-      console.log(`🔧 使用模型类型: ${modelType} (精品模型-大模型音色，支持长文本语音合成-预付费包-50万字符)`);
+      console.log(`🔧 使用模型类型: ${modelType} (基础模型，支持长文本语音合成)`);
       
       // 创建长文本语音合成任务
       responseData = await tencentTtsClient.CreateTtsTask(longTextParams);
@@ -1488,7 +1488,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
             SampleRate: 16000,
             Codec: 'mp3'
           };
-          console.log(`🔧 切换到长文本API，使用模型类型: ${modelType} (精品模型-大模型音色，支持长文本语音合成-预付费包-50万字符)`);
+          console.log(`🔧 切换到长文本API，使用模型类型: ${modelType} (基础模型，支持长文本语音合成)`);
           
           try {
             responseData = await tencentTtsClient.CreateTtsTask(longTextParams);
