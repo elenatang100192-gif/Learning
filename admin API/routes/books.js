@@ -3192,9 +3192,9 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.log('📝 英文文本:', audioText.substring(0, 100) + '...');
     console.log('📝 文本长度:', audioText.length, '字符');
     
-    // 腾讯云TextToVoice API对文本长度限制较严格，基础语音合成限制为150个汉字
-    // 对于英文文本，为了安全起见，限制在150字符以内
-    const MAX_TEXT_LENGTH = 150;
+    // 腾讯云长文本语音合成API（CreateTtsTask）支持最多5000字符
+    // 使用精品模型（大模型音色），支持中英文长文本合成
+    const MAX_TEXT_LENGTH = 5000;
     if (audioText.length > MAX_TEXT_LENGTH) {
       console.warn(`⚠️ 文本长度(${audioText.length}字符)超过限制(${MAX_TEXT_LENGTH}字符)，将截断文本`);
       // 尝试在句号、感叹号或问号处截断，保持完整性
