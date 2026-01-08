@@ -1188,7 +1188,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     }
     
     // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
-    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 2（精品模型-大模型音色）
+    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 1（精品模型-大模型音色）
     console.log('🔵 ========== 使用腾讯云长文本语音合成（精品模型-大模型音色） ==========');
     console.log('🔵 语言:', language);
 
