@@ -1476,8 +1476,8 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         if (shouldUseLongTextAPI || error.message === 'TextTooLong' || (error.code && error.code.includes('TextTooLong'))) {
           console.log('📝 TextToVoice失败，切换到长文本语音合成API（CreateTtsTask）');
           
-          // 使用ModelType: 2（精品模型-大模型音色），支持长文本语音合成-预付费包-50万字符
-          const modelType = 2; // 使用精品模型（大模型音色）
+          // 使用ModelType: 1（基础模型），支持长文本语音合成
+          const modelType = 1; // 使用基础模型
           const longTextParams = {
             Text: text,
             ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（大模型音色）
