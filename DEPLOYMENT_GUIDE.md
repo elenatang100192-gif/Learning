@@ -1185,7 +1185,7 @@ EMAIL_SECURE=false
 
 # 方式3: 使用 163 邮箱（推荐，国内用户）
 EMAIL_USER=elenatang1001@163.com
-EMAIL_PASS=TANGlin1001
+EMAIL_PASS=xxxxx
 EMAIL_HOST=smtp.163.com
 EMAIL_PORT=465
 EMAIL_SECURE=true

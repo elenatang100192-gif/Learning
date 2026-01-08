@@ -49,11 +49,11 @@ router.post('/test-email', [
           message: 'Test email sent successfully via LeanCloud. Please check your inbox and spam folder.'
         });
       } catch (leancloudError) {
-        res.status(500).json({
-          success: false,
-          message: `邮件服务错误: ${emailError.message}`,
+      res.status(500).json({
+        success: false,
+        message: `邮件服务错误: ${emailError.message}`,
           details: '请检查邮件服务配置（EMAIL_USER 和 EMAIL_PASS）或 LeanCloud 控制台的邮件配置'
-        });
+      });
       }
     }
   } catch (error) {

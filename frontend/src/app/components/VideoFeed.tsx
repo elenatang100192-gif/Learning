@@ -85,7 +85,7 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
     // 默认头像：Ashley HR Center avatar
     // 使用 import.meta.env.BASE_URL 来适配开发和生产环境
     const defaultAvatar = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
-    
+
     return {
       id: leanCloudVideo.id,
       title: leanCloudVideo.title,
@@ -304,28 +304,28 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
 
   return (
     <>
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-y-scroll snap-y snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-      >
-        {videos.map((video, index) => (
-          <div
-            key={video.id}
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-scroll snap-y snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+    >
+      {videos.map((video, index) => (
+        <div
+          key={video.id}
             className="h-screen w-full snap-start snap-always flex-shrink-0 relative"
             style={{
               minHeight: '100vh',
               minHeight: '-webkit-fill-available', // iOS Safari 支持
             }}
-          >
-            <VideoCard
-              video={video}
-              isActive={index === currentIndex}
-              showFollowButton={showFollowButton}
+        >
+          <VideoCard
+            video={video}
+            isActive={index === currentIndex}
+            showFollowButton={showFollowButton}
               onProgressUpdate={index === currentIndex ? setCurrentProgress : undefined}
-            />
-          </div>
-        ))}
-      </div>
+          />
+        </div>
+      ))}
+    </div>
 
       {/* Fixed 定位的覆盖层元素 - 根据当前视频更新 */}
       {currentVideo && (

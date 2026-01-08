@@ -94,17 +94,17 @@ router.get('/:authorId/status', async (req, res) => {
     }
 
     try {
-      const authorPointer = AV.Object.createWithoutData('_User', authorId);
-      const query = new AV.Query('Follow');
-      query.equalTo('follower', currentUser);
-      query.equalTo('following', authorPointer);
+    const authorPointer = AV.Object.createWithoutData('_User', authorId);
+    const query = new AV.Query('Follow');
+    query.equalTo('follower', currentUser);
+    query.equalTo('following', authorPointer);
 
-      const count = await query.count();
+    const count = await query.count();
 
-      res.json({
-        success: true,
-        following: count > 0
-      });
+    res.json({
+      success: true,
+      following: count > 0
+    });
     } catch (queryError) {
       // 如果Follow类不存在（404错误）或其他查询错误，返回false
       if (queryError.code === 101 || queryError.code === 404) {
