@@ -68,7 +68,14 @@ function AppContent() {
   }
 
   return (
-    <div className="h-screen w-full bg-black flex flex-col overflow-hidden max-w-[480px] mx-auto">
+    <div 
+      className="h-screen w-full bg-black flex flex-col overflow-hidden max-w-[480px] mx-auto"
+      style={{
+        height: '100vh',
+        height: '100dvh', // 动态视口高度，适配移动端
+        minHeight: '-webkit-fill-available', // iOS Safari 支持
+      }}
+    >
       {currentView === 'home' && <Home userEmail={user?.email} />}
       {currentView === 'profile' && (
         <Profile 

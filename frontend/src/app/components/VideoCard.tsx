@@ -168,9 +168,9 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
   };
 
   return (
-    <div className="relative h-full w-full bg-black">
-      {/* 视频 - 抖音风格：全屏填充 */}
-      <div className="absolute inset-0">
+    <div className="relative h-full w-full bg-black flex items-center justify-center">
+      {/* 视频 - 抖音风格：固定位置，自适应不同手机尺寸 */}
+      <div className="absolute inset-0 w-full h-full">
         <video
           ref={videoRef}
           className="w-full h-full object-cover"
@@ -181,6 +181,10 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleVideoEnd}
           onClick={handleVideoClick}
+          style={{
+            objectFit: 'cover',
+            objectPosition: 'center',
+          }}
         />
       </div>
 
