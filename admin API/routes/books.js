@@ -1338,11 +1338,9 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       
       responseData = { Audio: audioUrl };
     }
-      // 文本较短，尝试使用普通TextToVoice API
-      // 如果失败（如TextTooLong错误），自动切换到长文本API
-      console.log('📝 文本较短，尝试使用普通语音合成API（TextToVoice）');
-      
-      try {
+    
+    // 处理音频数据：可能是base64编码的数据（TextToVoice）或URL（CreateTtsTask）
+    let buffer;
         // 使用ModelType: 2（精品模型-大模型音色）
         const modelType = 2; // 统一使用精品模型（大模型音色）
         const params = {
