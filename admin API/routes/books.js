@@ -1344,12 +1344,12 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       console.log('📝 文本较短，尝试使用普通语音合成API（TextToVoice）');
       
       try {
-        // 对于英文，使用ModelType: 1（基础模型）以支持501009（WeWinny）音色
-        const modelType = 1; // 统一使用基础模型
+        // 使用ModelType: 2（精品模型-大模型音色）
+        const modelType = 2; // 统一使用精品模型（大模型音色）
         const params = {
           Text: text,
           SessionId: `session_${contentId}_${Date.now()}`, // 唯一的会话标识符
-          ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（英文可能需要精品模型）
+          ModelType: modelType, // 模型类型：1-基础模型，2-精品模型（大模型音色）
           VoiceType: voiceType, // 根据语言选择音色类型
           Volume: 0, // 音量：范围[-10, 10]，0为正常音量
           Speed: 0, // 语速：范围[-2, 2]，0为正常语速
@@ -1357,7 +1357,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
           SampleRate: 16000, // 采样率：16000或8000
           Codec: 'mp3' // 音频格式：mp3、pcm
         };
-        console.log(`🔧 使用模型类型: ${modelType} (${modelType === 2 ? '精品模型' : '基础模型'})`);
+        console.log(`🔧 使用模型类型: ${modelType} (精品模型-大模型音色)`);
         
         // 使用腾讯云SDK调用API
         responseData = await tencentTtsClient.TextToVoice(params);
@@ -1468,15 +1468,16 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
               
               // 特殊处理资源包配额用完错误
               if (apiError.Code === 'UnsupportedOperation.PkgExhausted') {
-                // 已经是基础模型，无法再降级，直接返回错误
-                console.log('⚠️ 检测到资源包相关错误，当前已使用基础模型（ModelType: 1）');
+                // 当前使用的是精品模型（大模型音色），返回错误
+                console.log(`⚠️ 检测到资源包相关错误，当前已使用精品模型（大模型音色）（ModelType: ${modelType}）`);
                 return res.status(402).json({
                   success: false,
                   message: '腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值',
                   error: apiError.Message || '资源包配额已用完',
                   code: apiError.Code,
                   originalError: apiError,
-                  suggestion: '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-基础模型-预付费包"资源包'
+                  currentModelType: modelType,
+                  suggestion: '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-大模型音色-预付费包-50万字符"资源包'
                 });
               }
               
@@ -3428,7 +3429,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       const responseData = await tencentTtsClient.TextToVoice({
         Text: audioText,
         SessionId: `session_${contentId}_${Date.now()}`,
-        ModelType: 1, // 基础模型
+        ModelType: 2, // 精品模型（大模型音色）
         VoiceType: voiceType,
         Volume: 0,
         Speed: 0,
