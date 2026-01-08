@@ -1325,7 +1325,8 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
                   console.log('✅ 切换到精品模型成功，继续处理...');
                   responseData = fallbackResponse;
                   modelType = fallbackModelType; // 更新 modelType 变量
-                  // 跳出错误处理，继续执行后续代码
+                  // 清除错误标志，跳出错误处理，继续执行后续代码
+                  // 注意：这里不 return，让代码继续执行到后续的 TaskId 处理逻辑
                 } else {
                   // 精品模型也失败，返回详细错误信息
                   const premiumError = fallbackResponse.Error;
