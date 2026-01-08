@@ -277,28 +277,184 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
     }
   }, [category]);
 
+  // 获取当前视频
+  const currentVideo = videos.length > 0 && currentIndex >= 0 && currentIndex < videos.length 
+    ? videos[currentIndex] 
+    : null;
+
+  // 处理关注/取消关注
+  const handleFollow = async () => {
+    if (!currentVideo || !currentVideo.authorId) return;
+
+    try {
+      const following = await followAPI.toggleFollow(currentVideo.authorId);
+      setIsFollowing(following);
+      // 更新视频列表中的关注状态
+      setVideos(prevVideos => 
+        prevVideos.map(v => 
+          v.id === currentVideo.id ? { ...v, isFollowing: following } : v
+        )
+      );
+      toast.success(following ? (language === 'zh' ? '已关注' : 'Following') : (language === 'zh' ? '已取消关注' : 'Unfollowed'));
+    } catch (error) {
+      console.error('关注操作失败:', error);
+      toast.error(language === 'zh' ? '操作失败，请重试' : 'Operation failed, please try again');
+    }
+  };
+
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-y-scroll snap-y snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-    >
-      {videos.map((video, index) => (
-        <div
-          key={video.id}
-          className="h-screen w-full snap-start snap-always flex-shrink-0 relative"
-          style={{
-            minHeight: '100vh',
-            minHeight: '-webkit-fill-available', // iOS Safari 支持
-          }}
-        >
-          <VideoCard
-            video={video}
-            isActive={index === currentIndex}
-            showFollowButton={showFollowButton}
-            onProgressUpdate={index === currentIndex ? setCurrentProgress : undefined}
-          />
-        </div>
-      ))}
-    </div>
+    <>
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-scroll snap-y snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+      >
+        {videos.map((video, index) => (
+          <div
+            key={video.id}
+            className="h-screen w-full snap-start snap-always flex-shrink-0 relative"
+            style={{
+              minHeight: '100vh',
+              minHeight: '-webkit-fill-available', // iOS Safari 支持
+            }}
+          >
+            <VideoCard
+              video={video}
+              isActive={index === currentIndex}
+              showFollowButton={showFollowButton}
+              onProgressUpdate={index === currentIndex ? setCurrentProgress : undefined}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Fixed 定位的覆盖层元素 - 根据当前视频更新 */}
+      {currentVideo && (
+        <>
+          {/* 右侧交互按钮 */}
+          <div className="fixed right-4 bottom-52 z-20 max-w-[480px]" style={{ right: 'calc((100vw - min(100vw, 480px)) / 2 + 16px)' }}>
+            <VideoInteractions video={currentVideo} />
+          </div>
+
+          {/* 进度条 */}
+          <div 
+            className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
+            style={{
+              bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 1px)',
+            }}
+          >
+            <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white rounded-full transition-all duration-200"
+                style={{ width: `${currentProgress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* 作者信息和视频标题 */}
+          <div 
+            className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
+            style={{
+              top: '64px',
+              bottom: 'max(calc(64px + env(safe-area-inset-bottom, 0px) + 50px), 120px)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-end',
+              paddingBottom: '8px',
+            }}
+          >
+            <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4 rounded-t-lg">
+              <div className="text-white pointer-events-auto">
+                <div className="flex items-center gap-3 mb-2">
+                  <img
+                    src={currentVideo.avatar}
+                    alt={currentVideo.author}
+                    className="w-10 h-10 rounded-full border-2 border-white object-cover flex-shrink-0 bg-white"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('ashley-avatar.jpg')) {
+                        target.src = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="font-semibold text-sm truncate">{currentVideo.author}</div>
+                    {showFollowButton && currentVideo.authorId && currentVideo.authorId.trim() !== '' && (
+                      <button 
+                        onClick={handleFollow}
+                        className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 transition-colors whitespace-nowrap ${
+                          isFollowing 
+                            ? 'bg-zinc-700 text-white hover:bg-zinc-600' 
+                            : 'bg-white text-black hover:bg-white/90'
+                        }`}
+                      >
+                        {isFollowing ? (language === 'zh' ? '已关注' : 'Following') : (language === 'zh' ? '关注' : 'Follow')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* 视频标题 - 支持置顶显示 */}
+                <div className="relative">
+                  <p 
+                    className="text-sm leading-relaxed pr-20"
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {language === 'zh' ? currentVideo.title : currentVideo.titleEn}
+                  </p>
+                  {/* 如果标题过长，显示置顶按钮 */}
+                  {(language === 'zh' ? currentVideo.title : currentVideo.titleEn).length > 50 && (
+                    <button
+                      onClick={() => {
+                        // 滚动到顶部显示完整标题
+                        const titleElement = document.querySelector('[data-video-title]');
+                        if (titleElement) {
+                          titleElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
+                      className="absolute top-0 right-0 text-xs text-white/70 hover:text-white underline"
+                    >
+                      {language === 'zh' ? '查看全文' : 'View Full'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 置顶显示完整标题的区域（当标题过长时） */}
+          {(language === 'zh' ? currentVideo.title : currentVideo.titleEn).length > 50 && (
+            <div 
+              className="fixed top-16 left-0 right-0 z-40 px-4 pointer-events-none max-w-[480px] mx-auto"
+              data-video-title
+            >
+              <div className="bg-black/80 backdrop-blur-md rounded-lg p-3 pointer-events-auto">
+                <div className="flex items-center gap-2 mb-2">
+                  <img
+                    src={currentVideo.avatar}
+                    alt={currentVideo.author}
+                    className="w-8 h-8 rounded-full border border-white/30 object-cover flex-shrink-0"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('ashley-avatar.jpg')) {
+                        target.src = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
+                      }
+                    }}
+                  />
+                  <div className="font-semibold text-sm text-white">{currentVideo.author}</div>
+                </div>
+                <p className="text-sm text-white leading-relaxed break-words">
+                  {language === 'zh' ? currentVideo.title : currentVideo.titleEn}
+                </p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }
