@@ -1798,9 +1798,9 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
       // 根据API文档，使用 --ratio 9:16 --dur 参数格式
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      // 如果是中文视频，添加漫画风格参数
-      const styleParam = isChineseVideo ? ' --style comic' : '';
-      const promptWithParams = `${currentText} --ratio 9:16 --dur ${videoSegmentDuration}${styleParam}`;
+      // 如果是中文视频，添加漫画风格描述
+      const styleText = isChineseVideo ? '，漫画风格，动画风格' : '';
+      const promptWithParams = `${currentText}${styleText} --ratio 9:16 --dur ${videoSegmentDuration}`;
       
       const textToVideoRequestBody = {
         model: DOUBAO_MODEL_ID,
@@ -2625,9 +2625,9 @@ async function generateVideoWithTextToVideo(req, res, contentId, audioUrl) {
       // 参数格式：--ratio 9:16 --dur {duration}
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      // 如果是中文视频，添加漫画风格参数
-      const styleParam = isChineseVideo ? ' --style comic' : '';
-      const promptWithParams = `${segmentText} --ratio 9:16 --dur ${videoSegmentDuration}${styleParam}`;
+      // 如果是中文视频，添加漫画风格描述
+      const styleText = isChineseVideo ? '，漫画风格，动画风格' : '';
+      const promptWithParams = `${segmentText}${styleText} --ratio 9:16 --dur ${videoSegmentDuration}`;
       
       const textToVideoRequestBody = {
         model: DOUBAO_MODEL_ID, // Doubao模型ID或Endpoint ID
