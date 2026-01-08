@@ -339,7 +339,7 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
           <div 
             className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
             style={{
-              bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 1px)',
+              bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
             }}
           >
             <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
@@ -355,11 +355,11 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
             className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
             style={{
               top: '64px',
-              bottom: 'max(calc(64px + env(safe-area-inset-bottom, 0px) + 50px), 120px)',
+              bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-end',
-              paddingBottom: '8px',
+              paddingBottom: '0px',
             }}
           >
             <div className="bg-black/30 pt-4 -mx-4 px-4 rounded-t-lg">
