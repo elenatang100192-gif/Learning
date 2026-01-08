@@ -1072,7 +1072,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         const doubaoTtsRequest = {
           app: {
             appid: DOUBAO_TTS_APP_ID,
-            token: DOUBAO_TTS_ACCESS_TOKEN,
+            token: DOUBAO_TTS_ACCESS_KEY,
             cluster: 'volcano_tts'
           },
           user: {
