@@ -11,6 +11,18 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  /* 移动端视口高度适配 */
+  height: 100vh;
+  height: 100dvh; /* 动态视口高度，适配移动端浏览器地址栏 */
+  min-height: -webkit-fill-available; /* iOS Safari 支持 */
+}
+
+/* 确保根元素也使用正确的视口高度 */
+#root {
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 /* 移动端优化 */
