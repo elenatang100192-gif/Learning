@@ -432,7 +432,7 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
               className="fixed top-16 left-0 right-0 z-40 px-4 pointer-events-none max-w-[480px] mx-auto"
               data-video-title
             >
-              <div className="bg-black/80 backdrop-blur-md rounded-lg p-3 pointer-events-auto">
+              <div className="bg-black/50 backdrop-blur-sm rounded-lg p-3 pointer-events-auto">
                 <div className="flex items-center gap-2 mb-2">
                   <img
                     src={currentVideo.avatar}
