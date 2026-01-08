@@ -3385,13 +3385,13 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       console.log(`🔄 需要重复 ${repeatCount} 次视频`);
       
       // 创建视频列表文件用于concat
-      const concatListPath = path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`);
+      concatListPath = path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`);
       const concatListContent = Array(repeatCount).fill(`file '${tempVideoPath.replace(/'/g, "\\'")}'`).join('\n');
       await fs.writeFile(concatListPath, concatListContent);
       console.log('📝 创建视频拼接列表文件:', concatListPath);
       
       // 拼接重复的视频
-      const concatenatedVideoPath = path.join(tempDir, `concatenated_video_${contentId}_${timestamp}.mp4`);
+      concatenatedVideoPath = path.join(tempDir, `concatenated_video_${contentId}_${timestamp}.mp4`);
       await new Promise((resolve, reject) => {
         let timeoutId = null;
         const timeout = 300000; // 5分钟超时
