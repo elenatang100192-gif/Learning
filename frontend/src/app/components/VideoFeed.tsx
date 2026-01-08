@@ -408,34 +408,6 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
               </div>
             </div>
           </div>
-
-          {/* 置顶显示完整标题的区域（当标题过长时） */}
-          {(language === 'zh' ? currentVideo.title : currentVideo.titleEn).length > 50 && (
-            <div 
-              className="fixed top-16 left-0 right-0 z-40 px-4 pointer-events-none max-w-[480px] mx-auto"
-              data-video-title
-            >
-              <div className="bg-black/50 backdrop-blur-sm rounded-lg p-3 pointer-events-auto">
-                <div className="flex items-center gap-2 mb-2">
-                  <img
-                    src={currentVideo.avatar}
-                    alt={currentVideo.author}
-                    className="w-8 h-8 rounded-full border border-white/30 object-cover flex-shrink-0"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      if (!target.src.includes('ashley-avatar.jpg')) {
-                        target.src = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
-                      }
-                    }}
-                  />
-                  <div className="font-semibold text-sm text-white">{currentVideo.author}</div>
-                </div>
-                <p className="text-sm text-white leading-relaxed break-words">
-                  {language === 'zh' ? currentVideo.title : currentVideo.titleEn}
-                </p>
-              </div>
-            </div>
-          )}
         </>
       )}
     </>
