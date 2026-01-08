@@ -230,7 +230,7 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         className="absolute left-0 right-0 z-10 px-4 pointer-events-none"
         style={{
           top: '64px', // 顶部导航菜单下方
-          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 24px)', // 底部导航菜单高度 + 安全区域 + 额外间距
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 40px)', // 底部导航菜单高度 + 安全区域 + 额外间距（40px确保不被遮挡）
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-end',
