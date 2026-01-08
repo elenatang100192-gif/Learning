@@ -3081,102 +3081,128 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       console.log(`📝 文本已截断到 ${audioText.length} 字符`);
     }
     
-    // 直接使用腾讯云TTS生成英文音频（跳过豆包TTS）
-    let audioBuffer;
-      
-    // 初始化腾讯云TTS客户端和音色类型（在try块外部定义，以便在catch块中使用）
-      const TtsClient = tencentcloud.tts.v20190823.Client;
-      const tencentTtsClient = new TtsClient({
-        credential: {
-          secretId: process.env.TENCENT_SECRET_ID,
-          secretKey: process.env.TENCENT_SECRET_KEY,
+    // 使用腾讯云长文本语音合成API（CreateTtsTask）生成英文音频
+    // 统一使用长文本API，与generate-audio路由保持一致
+    console.log('🎵 使用腾讯云长文本语音合成API（CreateTtsTask）生成英文音频...');
+    console.log('📝 文本长度:', audioText.length, '字符');
+    
+    // 初始化腾讯云TTS客户端
+    const TtsClient = tencentcloud.tts.v20190823.Client;
+    const tencentTtsClient = new TtsClient({
+      credential: {
+        secretId: process.env.TENCENT_SECRET_ID,
+        secretKey: process.env.TENCENT_SECRET_KEY,
+      },
+      region: 'ap-guangzhou',
+      profile: {
+        httpProfile: {
+          endpoint: 'tts.tencentcloudapi.com',
         },
-        region: 'ap-guangzhou',
-        profile: {
-          httpProfile: {
-            endpoint: 'tts.tencentcloudapi.com',
-          },
-        },
-      });
-      
-      // 使用腾讯云TTS生成英文音频
-      // 对于英文，使用VoiceType: 1009 (WeWinny)
-    // 只使用短文本API（TextToVoice），如果文本太长则截断
-      const voiceType = 1009; // WeWinny英文音色
-      
+      },
+    });
+    
+    // 使用长文本API（CreateTtsTask），使用精品模型（大模型音色）
+    // 英文音色：301001（长文本语音合成专用音色）
+    const voiceType = 301001; // 英文-长文本语音合成专用音色
+    const modelType = 1; // 精品模型（大模型音色）
+    
+    console.log(`🎤 使用音色类型: ${voiceType} (英文-长文本语音合成专用音色)`);
+    console.log(`🔧 使用模型类型: ${modelType} (精品模型-大模型音色)`);
+    
+    // 按照腾讯云API文档格式设置参数
+    const longTextParams = {
+      Text: audioText,
+      ProjectId: 0, // 项目ID，0表示默认项目
+      ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
+      Volume: 0, // 音量：范围[-10, 10]，0为正常音量
+      Codec: 'mp3', // 音频格式：mp3、pcm
+      VoiceType: voiceType, // 英文音色：301001
+      SampleRate: 16000, // 采样率：16000或8000
+      PrimaryLanguage: 2, // 主语言：2-英文
+      Speed: 0 // 语速：范围[-2, 2]，0为正常语速
+    };
+    
+    console.log('📋 CreateTtsTask 请求参数:', JSON.stringify(longTextParams, null, 2));
+    
+    let englishAudioUrl;
     try {
-      console.log('🔄 使用腾讯云TTS生成英文音频（短文本API）...');
-      console.log('📝 文本长度:', audioText.length, '字符');
-      
-      const responseData = await tencentTtsClient.TextToVoice({
-        Text: audioText,
-        SessionId: `session_${contentId}_${Date.now()}`,
-        ModelType: 1, // 精品模型（大模型音色）
-        VoiceType: voiceType,
-        Volume: 0,
-        Speed: 0,
-        ProjectId: 0,
-        SampleRate: 16000,
-        Codec: 'mp3'
-      });
+      // 创建长文本语音合成任务
+      const responseData = await tencentTtsClient.CreateTtsTask(longTextParams);
+      console.log('✅ 腾讯云长文本API响应:', JSON.stringify(responseData, null, 2));
       
       // 检查错误
       if (responseData.Error) {
         const error = responseData.Error;
-        console.error('❌ 腾讯云API错误:', error);
+        console.error('❌ 腾讯云API错误:', JSON.stringify(error, null, 2));
         console.error('❌ 错误代码:', error.Code);
         console.error('❌ 错误消息:', error.Message);
+        console.error('❌ 请求参数:', JSON.stringify(longTextParams, null, 2));
         
         // 特殊处理资源包配额用完错误
-        if (error.Code === 'UnsupportedOperation.PkgExhausted') {
-          throw new Error('腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值。访问地址：https://console.cloud.tencent.com/tts');
+        const isResourcePackError = error.Code === 'UnsupportedOperation.PkgExhausted' || 
+                                    error.Code === 'ResourceInsufficient' ||
+                                    (error.Message && (
+                                      error.Message.includes('资源包') || 
+                                      error.Message.includes('resource pack') ||
+                                      error.Message.includes('配额') ||
+                                      error.Message.includes('quota') ||
+                                      error.Message.includes('exhausted') ||
+                                      error.Message.includes('allowance')
+                                    ));
+        
+        if (isResourcePackError) {
+          throw new Error('腾讯云资源包配额已用完，请前往腾讯云控制台购买"长文本语音合成-精品模型-预付费包"（ModelType: 1）。访问地址：https://console.cloud.tencent.com/tts');
         }
         
-        // 如果是文本太长错误，提示用户文本过长
-        if (error.Message && (error.Message.includes('Text too long') || error.Message.includes('文本过长') || 
-            error.Code === 'InvalidParameterValue.TextTooLong' || error.Code === 'UnsupportedOperation.TextTooLong')) {
-          throw new Error(`文本过长（${audioText.length}字符），请缩短文本内容或截断文本`);
+        throw new Error(`腾讯云API错误: ${error.Message || '未知错误'}`);
+      }
+      
+      // 长文本API返回TaskId，需要轮询查询结果
+      const taskId = responseData.Data?.TaskId;
+      if (!taskId) {
+        throw new Error('腾讯云API响应中未找到TaskId');
+      }
+      
+      console.log('✅ 长文本语音合成任务已创建，TaskId:', taskId);
+      
+      // 轮询查询任务状态（最多等待60秒）
+      const maxAttempts = 30; // 最多查询30次
+      const pollInterval = 2000; // 每2秒查询一次
+      
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        
+        // 按照腾讯云API文档格式设置查询参数
+        const queryParams = {
+          TaskId: taskId
+        };
+        console.log(`📋 DescribeTtsTaskStatus 请求参数 (${attempt + 1}/${maxAttempts}):`, JSON.stringify(queryParams, null, 2));
+        
+        const queryResponse = await tencentTtsClient.DescribeTtsTaskStatus(queryParams);
+        console.log(`📊 查询任务状态 (${attempt + 1}/${maxAttempts}):`, JSON.stringify(queryResponse, null, 2));
+        
+        if (queryResponse.Error) {
+          throw new Error(`查询任务状态失败: ${queryResponse.Error.Message}`);
         }
         
-        // 其他错误直接抛出
-        throw new Error(`腾讯云TTS错误: ${error.Message || '未知错误'}`);
+        const status = queryResponse.Data?.Status;
+        if (status === 2) { // 2表示任务完成
+          englishAudioUrl = queryResponse.Data?.ResultUrl;
+          if (englishAudioUrl) {
+            console.log('✅ 任务完成，获取到音频URL:', englishAudioUrl);
+            break;
+          }
+        } else if (status === 3) { // 3表示任务失败
+          throw new Error(`任务失败: ${queryResponse.Data?.ErrorMsg || '未知错误'}`);
+        }
+        // status === 0 表示任务处理中，继续轮询
       }
       
-      if (!responseData.Audio) {
-        throw new Error('腾讯云TTS未返回音频数据');
+      if (!englishAudioUrl) {
+        throw new Error('任务超时，未能获取音频URL');
       }
       
-      // 解码base64音频数据
-      audioBuffer = Buffer.from(responseData.Audio, 'base64');
-      console.log('✅ 腾讯云TTS生成英文音频成功，大小:', audioBuffer.length, 'bytes');
-    } catch (tencentError) {
-      console.error('❌ 腾讯云TTS生成英文音频失败:', tencentError);
-      console.error('❌ 错误详情:', JSON.stringify(tencentError, Object.getOwnPropertyNames(tencentError)));
-      
-      const errorMessage = tencentError.message || '';
-      const errorCode = tencentError.code || tencentError.Code || '';
-      
-      // 特殊处理资源包配额用完错误
-      if (errorCode === 'UnsupportedOperation.PkgExhausted' || 
-          (errorMessage.toLowerCase().includes('resource pack') && errorMessage.toLowerCase().includes('exhausted')) ||
-          (errorMessage.toLowerCase().includes('allowance') && errorMessage.toLowerCase().includes('exhausted'))) {
-        throw new Error('腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值。访问地址：https://console.cloud.tencent.com/tts');
-      }
-      
-      // 其他错误直接抛出原始错误消息
-      throw new Error(`生成英文音频失败: ${errorMessage || '未知错误'}`);
-    }
-    
-    // 确保audioBuffer已设置
-    if (!audioBuffer) {
-      throw new Error('未能生成音频数据');
-    }
-    
-    // 保存英文音频
-    const audioFile = new AV.File(`audio_en_${contentId}_${Date.now()}.mp3`, audioBuffer, 'audio/mpeg');
-    await audioFile.save();
-    const englishAudioUrl = audioFile.url();
-    console.log('✅ 英文音频生成完成，URL:', englishAudioUrl);
+      console.log('✅ 英文音频生成完成，URL:', englishAudioUrl);
     
     // 更新内容对象
     contentObj.set('audioUrlEn', englishAudioUrl);
