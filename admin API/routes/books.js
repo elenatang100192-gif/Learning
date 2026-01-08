@@ -1642,8 +1642,8 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
       // 根据API文档，使用 --ratio 9:16 --dur 参数格式
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      // 如果是中文视频，添加漫画风格描述
-      const styleText = isChineseVideo ? '，漫画风格，动画风格' : '';
+      // 明确指定动漫风格，色彩鲜艳
+      const styleText = '，动漫风格，色彩鲜艳';
       const promptWithParams = `${currentText}${styleText} --ratio 9:16 --dur ${videoSegmentDuration}`;
       
       const textToVideoRequestBody = {
@@ -2469,8 +2469,8 @@ async function generateVideoWithTextToVideo(req, res, contentId, audioUrl) {
       // 参数格式：--ratio 9:16 --dur {duration}
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      // 如果是中文视频，添加漫画风格描述
-      const styleText = isChineseVideo ? '，漫画风格，动画风格' : '';
+      // 明确指定动漫风格，色彩鲜艳
+      const styleText = '，动漫风格，色彩鲜艳';
       const promptWithParams = `${segmentText}${styleText} --ratio 9:16 --dur ${videoSegmentDuration}`;
       
       const textToVideoRequestBody = {
