@@ -3381,8 +3381,9 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     let finalVideoPath = tempVideoPath;
     if (audioDuration > videoDuration) {
       console.log(`⚠️ 英文音频时长(${audioDuration}秒) > 中文视频时长(${videoDuration}秒)，需要重复拼接视频`);
-      const repeatCount = Math.ceil(audioDuration / videoDuration);
-      console.log(`🔄 需要重复 ${repeatCount} 次视频`);
+      // 多拼接一些，确保视频时长 >= 音频时长（添加10%的缓冲）
+      const repeatCount = Math.ceil((audioDuration * 1.1) / videoDuration);
+      console.log(`🔄 需要重复 ${repeatCount} 次视频（包含10%缓冲，确保视频时长 >= 音频时长）`);
       
       // 创建视频列表文件用于concat
       concatListPath = path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`);
