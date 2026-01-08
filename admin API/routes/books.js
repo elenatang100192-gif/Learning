@@ -3624,7 +3624,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
                 '-s 720x1280', // 强制9:16竖屏分辨率
                 '-aspect 9:16', // 设置宽高比
                 '-c:a aac',
-                '-shortest' // 以音频时长为准
+                '-t', audioDuration.toString() // 明确指定输出时长为音频时长（秒）
               ])
               .output(tempOutputPath)
               .on('end', () => {
