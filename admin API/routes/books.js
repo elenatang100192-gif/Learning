@@ -1011,6 +1011,10 @@ Return in JSON format:
 
 // 使用腾讯云长语音合成将文字转换为语音
 router.post('/content/:contentId/generate-audio', async (req, res) => {
+  // 设置响应超时时间（15分钟），因为音频生成需要轮询查询任务状态
+  req.setTimeout(15 * 60 * 1000);
+  res.setTimeout(15 * 60 * 1000);
+  
   console.log('🚀 ========== 生成音频API被调用 ==========');
   console.log('📥 请求参数:', JSON.stringify(req.params, null, 2));
   console.log('📥 请求体:', JSON.stringify(req.body, null, 2));
