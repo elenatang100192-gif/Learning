@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { VideoInteractions } from './VideoInteractions';
 import { useLanguage } from '../contexts/LanguageContext';
 import { videoAPI, followAPI } from '../services/leancloud';
@@ -41,7 +41,7 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
     setIsFollowing(video.isFollowing);
   }, [video.isFollowing]);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hideControlsTimeout = useRef<NodeJS.Timeout>();
+  const hideControlsTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // 根据语言选择视频URL：英文优先使用videoUrlEn，如果没有则使用videoUrl
   const currentVideoUrl = language === 'en' && video.videoUrlEn 
