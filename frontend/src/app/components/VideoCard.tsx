@@ -27,9 +27,10 @@ interface VideoCardProps {
   video: Video;
   isActive: boolean;
   showFollowButton?: boolean; // 是否显示关注按钮，默认false（home页面不显示）
+  onProgressUpdate?: (progress: number) => void; // 进度更新回调
 }
 
-export function VideoCard({ video, isActive, showFollowButton = false }: VideoCardProps) {
+export function VideoCard({ video, isActive, showFollowButton = false, onProgressUpdate }: VideoCardProps) {
   const { t, language } = useLanguage();
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -131,6 +132,10 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
     if (!videoRef.current) return;
     const progress = (videoRef.current.currentTime / videoRef.current.duration) * 100;
     setProgress(progress);
+    // 通知父组件进度更新
+    if (onProgressUpdate && isActive) {
+      onProgressUpdate(progress);
+    }
   };
 
   // 视频结束时循环播放（只有激活的视频才循环）
@@ -199,88 +204,6 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       )}
 
-      {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方，确保不遮挡导航菜单 */}
-      {/* 使用 fixed 定位确保即使滚动时位置也不变 */}
-      {/* 底部导航菜单高度 h-16 (64px) + safe-area-bottom (约20-34px) = 约84-98px */}
-      {/* 互动按钮总高度：3个按钮(44px*3) + 间距(gap-4 = 16px*2) + 文字高度(约12px*3) = 约180px */}
-      {/* 所以需要至少 98px + 180px = 278px 的间距，使用 bottom-52 (208px) 确保完全可见 */}
-      <div className="fixed right-4 bottom-52 z-20 max-w-[480px] mx-auto" style={{ right: 'calc((100% - min(100%, 480px)) / 2 + 16px)' }}>
-        <VideoInteractions video={video} />
-      </div>
-
-      {/* 进度条 - 抖音风格：正好在底部导航的上边框，不遮挡导航菜单 */}
-      {/* 使用 fixed 定位确保即使滚动时位置也不变 */}
-      {/* 底部导航菜单高度 h-16 (64px) + safe-area-bottom，进度条位于其顶部边缘上方 */}
-      <div 
-        className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
-        style={{
-          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 1px)', // 底部导航高度 + 安全区域 + 1px间距
-        }}
-      >
-        <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-white rounded-full transition-all duration-200"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* 作者信息和视频标题 - 显示在顶部导航和底部导航之间 */}
-      {/* 使用 fixed 定位确保即使滚动时位置也不变 */}
-      {/* 顶部导航高度约64px，底部导航高度64px + safe-area-bottom (约34px) = 约98px */}
-      {/* 增加额外间距确保在 iPhone 14 Pro Max 上不被遮挡 */}
-      <div 
-        className="fixed left-0 right-0 z-10 px-4 pointer-events-none max-w-[480px] mx-auto"
-        style={{
-          top: '64px', // 顶部导航菜单下方
-          // 底部导航菜单：h-16 (64px) + safe-area-bottom padding (env(safe-area-inset-bottom))
-          // 增加更多间距确保在 iPhone 14 Pro Max 上完全不被遮挡
-          bottom: 'max(calc(64px + env(safe-area-inset-bottom, 0px) + 50px), 120px)', // 至少120px，或根据安全区域动态计算
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-end',
-          paddingBottom: '8px',
-        }}
-      >
-        {/* 背景渐变，从底部向上渐变，确保文字可见 */}
-        <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4 rounded-t-lg">
-          {/* 视频信息 - 抖音风格：左侧作者信息 */}
-          <div className="text-white pointer-events-auto">
-            <div className="flex items-center gap-3 mb-2">
-              <img
-                src={video.avatar}
-                alt={video.author}
-                className="w-10 h-10 rounded-full border-2 border-white object-cover flex-shrink-0 bg-white"
-                onError={(e) => {
-                  // 如果图片加载失败，使用默认头像
-                  const target = e.target as HTMLImageElement;
-                  if (!target.src.includes('ashley-avatar.jpg')) {
-                    target.src = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
-                  }
-                }}
-              />
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className="font-semibold text-sm truncate">{video.author}</div>
-                {showFollowButton && video.authorId && video.authorId.trim() !== '' && (
-                  <button 
-                    onClick={handleFollow}
-                    className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 transition-colors whitespace-nowrap ${
-                      isFollowing 
-                        ? 'bg-zinc-700 text-white hover:bg-zinc-600' 
-                        : 'bg-white text-black hover:bg-white/90'
-                    }`}
-                  >
-                    {isFollowing ? (language === 'zh' ? '已关注' : 'Following') : (language === 'zh' ? '关注' : 'Follow')}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* 视频标题 - 抖音风格：最多2行，右侧留出空间给互动按钮 */}
-            <p className="text-sm leading-relaxed line-clamp-2 pr-20">{language === 'zh' ? video.title : video.titleEn}</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

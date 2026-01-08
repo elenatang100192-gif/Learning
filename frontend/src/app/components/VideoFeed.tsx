@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { VideoCard } from './VideoCard';
+import { VideoInteractions } from './VideoInteractions';
 import { videoAPI, categoryAPI, likeAPI, favoriteAPI, commentAPI, followAPI, type Video as LeanCloudVideo } from '../services/leancloud';
 import { useLanguage } from '../contexts/LanguageContext';
 import { toast } from 'sonner';
@@ -35,6 +36,17 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
   const containerRef = useRef<HTMLDivElement>(null);
   const [videos, setVideos] = useState<FrontendVideo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentProgress, setCurrentProgress] = useState(0); // 当前视频的进度
+  const [isFollowing, setIsFollowing] = useState(false); // 当前视频的关注状态
+
+  // 当 currentIndex 变化时，更新关注状态和进度
+  useEffect(() => {
+    if (videos.length > 0 && currentIndex >= 0 && currentIndex < videos.length) {
+      const currentVideo = videos[currentIndex];
+      setIsFollowing(currentVideo.isFollowing);
+      setCurrentProgress(0); // 切换视频时重置进度
+    }
+  }, [currentIndex, videos]);
 
   // 将LeanCloud数据转换为前端格式
   const convertToFrontendVideo = async (leanCloudVideo: LeanCloudVideo): Promise<FrontendVideo> => {
@@ -283,6 +295,7 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
             video={video}
             isActive={index === currentIndex}
             showFollowButton={showFollowButton}
+            onProgressUpdate={index === currentIndex ? setCurrentProgress : undefined}
           />
         </div>
       ))}
