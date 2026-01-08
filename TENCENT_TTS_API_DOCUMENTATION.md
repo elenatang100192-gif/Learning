@@ -374,7 +374,7 @@ async function generateChineseAudio(text) {
     const params = {
       Text: text,
       ModelType: 2, // 精品模型（大模型音色）
-      VoiceType: 1001, // 中文-智逍遥
+      VoiceType: 601013, // 中文-长文本语音合成专用音色
       Volume: 0,
       Speed: 0,
       ProjectId: 0,
