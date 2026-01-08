@@ -1476,13 +1476,46 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
               
               // 特殊处理资源包配额用完错误
               if (apiError.Code === 'UnsupportedOperation.PkgExhausted') {
-                return res.status(402).json({
-                  success: false,
-                  message: '腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值',
-                  error: apiError.Message || '资源包配额已用完',
-                  code: apiError.Code,
-                  suggestion: '请访问 https://console.cloud.tencent.com/tts 购买资源包'
-                });
+                // 尝试降级到基础模型（ModelType: 1）
+                console.log('⚠️ 大模型音色资源包配额已用完，尝试降级到基础模型（ModelType: 1）');
+                try {
+                  const fallbackParams = {
+                    ...longTextParams,
+                    ModelType: 1 // 降级到基础模型
+                  };
+                  console.log('🔄 使用基础模型重新尝试生成音频...');
+                  const fallbackResponse = await tencentTtsClient.CreateTtsTask(fallbackParams);
+                  
+                  if (fallbackResponse.Error) {
+                    // 基础模型也失败，返回错误
+                    return res.status(402).json({
+                      success: false,
+                      message: '腾讯云资源包配额已用完（大模型音色和基础模型都已用完），请前往腾讯云控制台购买资源包或充值',
+                      error: apiError.Message || '资源包配额已用完',
+                      code: apiError.Code,
+                      suggestion: '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-大模型音色-预付费包-50万字符"资源包',
+                      fallbackAttempted: true,
+                      fallbackError: fallbackResponse.Error.Message
+                    });
+                  }
+                  
+                  // 降级成功，继续使用基础模型的响应
+                  console.log('✅ 降级到基础模型成功，继续处理...');
+                  responseData = fallbackResponse;
+                  // 继续执行后续代码，使用降级后的响应
+                } catch (fallbackError) {
+                  // 降级也失败，返回原始错误
+                  console.error('❌ 降级到基础模型也失败:', fallbackError);
+                  return res.status(402).json({
+                    success: false,
+                    message: '腾讯云资源包配额已用完，请前往腾讯云控制台购买资源包或充值',
+                    error: apiError.Message || '资源包配额已用完',
+                    code: apiError.Code,
+                    suggestion: '请访问 https://console.cloud.tencent.com/tts 购买"长文本语音合成-大模型音色-预付费包-50万字符"资源包',
+                    fallbackAttempted: true,
+                    fallbackError: fallbackError.message
+                  });
+                }
               }
               
               return res.status(500).json({
