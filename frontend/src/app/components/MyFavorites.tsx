@@ -68,7 +68,8 @@ export function MyFavorites({ user, onBack }: MyFavoritesProps) {
     }
 
     // 默认头像：Ashley HR Center avatar
-    const defaultAvatar = '/ashley-avatar.jpg';
+    // 使用 import.meta.env.BASE_URL 来适配开发和生产环境
+    const defaultAvatar = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
     
     return {
       id: leanCloudVideo.id,

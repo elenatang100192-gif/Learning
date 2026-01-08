@@ -227,7 +227,7 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
                   // 如果图片加载失败，使用默认头像
                   const target = e.target as HTMLImageElement;
                   if (!target.src.includes('ashley-avatar.jpg')) {
-                    target.src = '/ashley-avatar.jpg';
+                    target.src = `${import.meta.env.BASE_URL}ashley-avatar.jpg`;
                   }
                 }}
               />
