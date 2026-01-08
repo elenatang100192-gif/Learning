@@ -3371,7 +3371,17 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
           reject(err);
         } else {
           const duration = metadata.format.duration || 0;
-          console.log('🎵 英文音频时长:', duration, '秒');
+          const durationMinutes = Math.floor(duration / 60);
+          const durationSeconds = Math.floor(duration % 60);
+          console.log('🎵 英文音频时长:', duration, '秒', `(${durationMinutes}分${durationSeconds}秒)`);
+          console.log('🎵 英文音频详细信息:', JSON.stringify({
+            duration: duration,
+            durationFormatted: `${durationMinutes}分${durationSeconds}秒`,
+            durationSeconds: Math.ceil(duration),
+            bitrate: metadata.format.bit_rate,
+            size: metadata.format.size,
+            format: metadata.format.format_name
+          }, null, 2));
           resolve(duration);
         }
       });
