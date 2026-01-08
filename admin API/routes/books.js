@@ -1339,9 +1339,8 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       responseData = { Audio: audioUrl };
     }
     
-    // 处理音频数据：可能是base64编码的数据（TextToVoice）或URL（CreateTtsTask）
+    // 处理音频数据：CreateTtsTask API返回的是URL
     let buffer;
-        // 使用ModelType: 2（精品模型-大模型音色）
         const modelType = 2; // 统一使用精品模型（大模型音色）
         const params = {
           Text: text,
