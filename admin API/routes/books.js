@@ -1205,7 +1205,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     const useLongTextAPI = true; // 强制使用CreateTtsTask API（长文本语音合成-大模型音色）
     
     if (useLongTextAPI) {
-      console.log('📝 文本较长，使用长文本语音合成API（CreateTtsTask）');
+      console.log('📝 使用长文本语音合成API（CreateTtsTask）-大模型音色');
       
       // 使用CreateTtsTask API（长文本语音合成-大模型音色）
       // ModelType: 2 表示精品模型（大模型音色），支持长文本语音合成-预付费包-50万字符
