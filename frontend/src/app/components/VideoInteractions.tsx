@@ -156,13 +156,13 @@ export function VideoInteractions({ video }: VideoInteractionsProps) {
           </span>
         </button>
 
-        {/* 收藏 - 缩小按钮 */}
+        {/* 收藏 - 缩小按钮，增强可见性 */}
         <button
           onClick={handleSave}
           className="flex flex-col items-center gap-1 transition-transform active:scale-95"
         >
           <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
-            isSaved ? 'bg-white' : 'bg-black/30 backdrop-blur-md'
+            isSaved ? 'bg-white shadow-lg' : 'bg-black/50 backdrop-blur-md border border-white/20'
           }`}>
             <svg
               className={`w-6 h-6 ${isSaved ? 'text-yellow-500' : 'text-white'}`}
@@ -178,7 +178,7 @@ export function VideoInteractions({ video }: VideoInteractionsProps) {
               />
             </svg>
           </div>
-          <span className="text-white text-xs font-semibold">{language === 'zh' ? '收藏' : 'Save'}</span>
+          <span className="text-white text-xs font-semibold drop-shadow-lg">{language === 'zh' ? '收藏' : 'Save'}</span>
         </button>
 
       </div>

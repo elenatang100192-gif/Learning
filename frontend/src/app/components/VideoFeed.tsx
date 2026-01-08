@@ -70,8 +70,8 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
       authorName = language === 'zh' ? '爱室丽人力中心' : 'Ashley HR Center';
     }
 
-    // 默认头像：Ashley HR Center logo
-    const defaultAvatar = '/ashley-logo.svg';
+    // 默认头像：Ashley HR Center avatar
+    const defaultAvatar = '/ashley-avatar.jpg';
     
     return {
       id: leanCloudVideo.id,

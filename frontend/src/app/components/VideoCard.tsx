@@ -197,7 +197,7 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
 
       {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方，确保不遮挡导航菜单 */}
       {/* 底部导航菜单高度 h-16 (64px) + safe-area-bottom，所以需要至少 80px+ 的间距 */}
-      <div className="absolute right-4 bottom-36 z-20">
+      <div className="absolute right-4 bottom-40 z-20">
         <VideoInteractions video={video} />
       </div>
 
@@ -224,10 +224,10 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
                 alt={video.author}
                 className="w-10 h-10 rounded-full border-2 border-white object-cover flex-shrink-0 bg-white"
                 onError={(e) => {
-                  // 如果图片加载失败，使用默认 SVG
+                  // 如果图片加载失败，使用默认头像
                   const target = e.target as HTMLImageElement;
-                  if (!target.src.includes('ashley-logo.svg')) {
-                    target.src = '/ashley-logo.svg';
+                  if (!target.src.includes('ashley-avatar.jpg')) {
+                    target.src = '/ashley-avatar.jpg';
                   }
                 }}
               />
