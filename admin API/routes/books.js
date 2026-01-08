@@ -1315,27 +1315,28 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
           
           // 特殊处理VoiceType参数错误
           if (error.Message && error.Message.includes('VoiceType')) {
-          console.error(`❌ VoiceType参数错误，当前值: ${voiceType}, 语言: ${language}, ModelType: ${modelType}`);
-          console.error(`❌ 完整错误信息:`, JSON.stringify(error, null, 2));
-          console.error(`❌ 请求参数:`, JSON.stringify(longTextParams, null, 2));
-          return res.status(400).json({
+            console.error(`❌ VoiceType参数错误，当前值: ${voiceType}, 语言: ${language}, ModelType: ${modelType}`);
+            console.error(`❌ 完整错误信息:`, JSON.stringify(error, null, 2));
+            console.error(`❌ 请求参数:`, JSON.stringify(longTextParams, null, 2));
+            return res.status(400).json({
+              success: false,
+              message: `VoiceType参数错误: ${error.Message}`,
+              error: error.Message || JSON.stringify(error),
+              code: error.Code,
+              voiceType: voiceType,
+              language: language,
+              modelType: modelType,
+              suggestion: '请检查VoiceType参数是否正确，英文音色可以尝试：1005（男声）、1006（女声）、1007（女声）'
+            });
+          }
+          
+          return res.status(500).json({
             success: false,
-            message: `VoiceType参数错误: ${error.Message}`,
+            message: `腾讯云API错误: ${error.Message || '未知错误'}`,
             error: error.Message || JSON.stringify(error),
-            code: error.Code,
-            voiceType: voiceType,
-            language: language,
-            modelType: modelType,
-            suggestion: '请检查VoiceType参数是否正确，英文音色可以尝试：1005（男声）、1006（女声）、1007（女声）'
+            code: error.Code
           });
         }
-        
-        return res.status(500).json({
-          success: false,
-          message: `腾讯云API错误: ${error.Message || '未知错误'}`,
-          error: error.Message || JSON.stringify(error),
-          code: error.Code
-        });
       }
       
       // 长文本API返回TaskId，需要轮询查询结果
