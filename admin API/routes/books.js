@@ -3560,8 +3560,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.log(`📊 最终视频路径: ${finalVideoPath}`);
     console.log(`📊 音频路径: ${tempAudioPath}`);
     
-    // 再次验证最终视频时长，确保 >= 音频时长
-    const finalVideoDurationCheck = await new Promise((resolve) => {
+    // 再次验证最终视频时长，确保 >= 音频时长，如果不足则继续拼接
+    let finalVideoDurationCheck = await new Promise((resolve) => {
       ffmpeg.ffprobe(finalVideoPath, (err, metadata) => {
         if (err) {
           console.warn('⚠️ 获取最终视频时长失败:', err.message);
@@ -3574,12 +3574,126 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       });
     });
     
-    if (finalVideoDurationCheck !== null && finalVideoDurationCheck < audioDuration) {
-      console.error(`❌ 最终视频时长(${finalVideoDurationCheck}秒) < 音频时长(${audioDuration}秒)，视频拼接可能失败！`);
-      throw new Error(`视频拼接失败：最终视频时长(${finalVideoDurationCheck}秒)小于音频时长(${audioDuration}秒)`);
+    // 如果视频时长不足，继续拼接直到满足要求
+    while (finalVideoDurationCheck !== null && finalVideoDurationCheck < audioDuration) {
+      console.log(`⚠️ 最终视频时长(${finalVideoDurationCheck}秒) < 音频时长(${audioDuration}秒)，继续拼接视频...`);
+      const additionalDurationNeeded = audioDuration - finalVideoDurationCheck;
+      const additionalRepeatCount = Math.ceil((additionalDurationNeeded * 1.1) / videoDuration) + 1; // 多拼接一些，确保足够
+      console.log(`🔄 需要额外重复 ${additionalRepeatCount} 次视频`);
+      
+      // 创建新的concat列表，包含已拼接的视频和额外的重复
+      const additionalConcatListPath = path.join(tempDir, `concat_list_additional_${contentId}_${timestamp}_${Date.now()}.txt`);
+      const additionalConcatContent = [
+        `file '${finalVideoPath.replace(/'/g, "\\'")}'`, // 先包含已拼接的视频
+        ...Array(additionalRepeatCount).fill(`file '${tempVideoPath.replace(/'/g, "\\'")}'`) // 再添加额外的重复
+      ].join('\n');
+      await fs.writeFile(additionalConcatListPath, additionalConcatContent);
+      console.log('📝 创建额外拼接列表文件:', additionalConcatListPath);
+      
+      // 再次拼接
+      const newConcatenatedVideoPath = path.join(tempDir, `concatenated_video_${contentId}_${timestamp}_${Date.now()}.mp4`);
+      await new Promise((resolve, reject) => {
+        let timeoutId = null;
+        const timeout = 300000;
+        
+        const additionalConcatProcess = ffmpeg()
+          .input(additionalConcatListPath)
+          .inputOptions(['-f', 'concat', '-safe', '0'])
+          .outputOptions([
+            '-c:v copy',
+            '-c:a copy'
+          ])
+          .output(newConcatenatedVideoPath)
+          .on('start', (commandLine) => {
+            console.log('🎬 FFmpeg额外拼接命令:', commandLine);
+            timeoutId = setTimeout(() => {
+              console.error('❌ 额外视频拼接超时（5分钟）');
+              additionalConcatProcess.kill('SIGKILL');
+              reject(new Error('额外视频拼接超时，请重试'));
+            }, timeout);
+          })
+          .on('end', () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            console.log('✅ 额外视频拼接完成');
+            resolve(null);
+          })
+          .on('error', (err) => {
+            if (timeoutId) clearTimeout(timeoutId);
+            console.error('❌ FFmpeg额外拼接失败:', err);
+            // 如果copy失败，尝试重新编码
+            if (err.message && err.message.includes('copy')) {
+              console.log('⚠️ 视频流复制失败，尝试重新编码拼接...');
+              const fallbackConcatProcess = ffmpeg()
+                .input(additionalConcatListPath)
+                .inputOptions(['-f', 'concat', '-safe', '0'])
+                .outputOptions([
+                  '-c:v libx264',
+                  '-preset ultrafast',
+                  '-crf 23',
+                  '-pix_fmt yuv420p',
+                  '-s 720x1280',
+                  '-aspect 9:16'
+                ])
+                .output(newConcatenatedVideoPath)
+                .on('end', () => {
+                  console.log('✅ 视频拼接完成（使用重新编码）');
+                  resolve(null);
+                })
+                .on('error', (fallbackErr) => {
+                  console.error('❌ 重新编码拼接也失败:', fallbackErr);
+                  reject(fallbackErr);
+                })
+                .run();
+            } else {
+              reject(err);
+            }
+          })
+          .run();
+      });
+      
+      // 清理旧的视频文件（保留原始视频）
+      if (finalVideoPath !== tempVideoPath && finalVideoPath !== concatenatedVideoPath) {
+        try {
+          await fs.unlink(finalVideoPath);
+        } catch (e) {
+          console.warn('⚠️ 清理旧视频文件失败:', e.message);
+        }
+      }
+      if (concatListPath && concatListPath !== additionalConcatListPath) {
+        try {
+          await fs.unlink(concatListPath);
+        } catch (e) {
+          console.warn('⚠️ 清理旧concat列表文件失败:', e.message);
+        }
+      }
+      
+      // 更新路径
+      finalVideoPath = newConcatenatedVideoPath;
+      concatListPath = additionalConcatListPath;
+      if (concatenatedVideoPath && concatenatedVideoPath !== newConcatenatedVideoPath) {
+        concatenatedVideoPath = newConcatenatedVideoPath;
+      }
+      
+      // 重新检查视频时长
+      finalVideoDurationCheck = await new Promise((resolve) => {
+        ffmpeg.ffprobe(finalVideoPath, (err, metadata) => {
+          if (err) {
+            console.warn('⚠️ 获取拼接后视频时长失败:', err.message);
+            resolve(null);
+          } else {
+            const duration = metadata.format.duration || 0;
+            console.log('📹 拼接后视频时长:', duration, '秒');
+            resolve(duration);
+          }
+        });
+      });
     }
     
-    console.log(`✅ 视频时长(${finalVideoDurationCheck || '未知'}秒) >= 音频时长(${audioDuration}秒)，可以合并`);
+    if (finalVideoDurationCheck === null) {
+      console.warn('⚠️ 无法获取最终视频时长，继续合并（可能存在问题）');
+    } else {
+      console.log(`✅ 视频时长(${finalVideoDurationCheck}秒) >= 音频时长(${audioDuration}秒)，可以合并`);
+    }
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
