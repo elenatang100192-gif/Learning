@@ -112,22 +112,22 @@ async function sendOTPEmail(email, otp) {
     const mailOptions = {
       from: `"VidBrain AI" <${process.env.EMAIL_USER || process.env.SMTP_USER}>`,
       to: email,
-      subject: '您的登录验证码',
+      subject: 'Your Login Verification Code',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #ff6b35;">VidBrain AI Short Video Platform</h2>
-          <p>您好，</p>
-          <p>您正在登录 VidBrain AI Short Video Platform，请使用以下验证码完成登录：</p>
+          <p>Hello,</p>
+          <p>You are logging in to VidBrain AI Short Video Platform. Please use the following verification code to complete your login:</p>
           <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
             <h1 style="color: #ff6b35; font-size: 32px; margin: 0; letter-spacing: 5px;">${otp}</h1>
           </div>
-          <p style="color: #666; font-size: 14px;">验证码有效期为 5 分钟，请勿泄露给他人。</p>
-          <p style="color: #666; font-size: 14px;">如果这不是您的操作，请忽略此邮件。</p>
+          <p style="color: #666; font-size: 14px;">This verification code is valid for 5 minutes. Please do not share it with others.</p>
+          <p style="color: #666; font-size: 14px;">If this was not your action, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #999; font-size: 12px;">此邮件由系统自动发送，请勿回复。</p>
+          <p style="color: #999; font-size: 12px;">This is an automated email. Please do not reply.</p>
         </div>
       `,
-      text: `您的登录验证码是：${otp}，有效期为 5 分钟。`
+      text: `Your login verification code is: ${otp}. It is valid for 5 minutes.`
     };
 
     // 发送邮件

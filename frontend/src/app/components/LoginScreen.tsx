@@ -41,9 +41,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         if (result.development && result.otp) {
           console.log('🔍 前端检测到开发模式，显示OTP:', result.otp);
           toast.success(
-            '开发模式：OTP验证码已生成',
+            'Development Mode: OTP Code Generated',
             {
-              description: `您的验证码是：${result.otp}。请使用此验证码登录。`,
+              description: `Your verification code is: ${result.otp}. Please use this code to login.`,
               duration: 20000, // 延长显示时间
             }
           );
@@ -51,9 +51,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           // 生产模式：正常提示
           console.log('📧 前端检测到生产模式，显示邮件提示');
           toast.success(
-            t.codeSent || '验证码已发送到您的邮箱',
+            t.codeSent || 'Code sent to your email',
             {
-              description: '请检查收件箱、垃圾邮件和促销邮件文件夹。如未收到，请等待1-2分钟后重试。',
+              description: 'Please check your inbox, spam, and promotions folders. If you don\'t receive it, please wait 1-2 minutes and try again.',
               duration: 10000,
             }
           );
