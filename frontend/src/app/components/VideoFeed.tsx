@@ -362,7 +362,7 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
               paddingBottom: '8px',
             }}
           >
-            <div className="bg-gradient-to-t from-black/50 via-black/40 to-transparent pt-4 -mx-4 px-4 rounded-t-lg">
+            <div className="bg-black/30 pt-4 -mx-4 px-4 rounded-t-lg">
               <div className="text-white pointer-events-auto">
                 <div className="flex items-center gap-3 mb-2">
                   <img
