@@ -3491,7 +3491,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
           if (err.message && err.message.includes('copy')) {
             console.log('⚠️ 视频流复制失败，尝试重新编码...');
             const fallbackProcess = ffmpeg()
-              .input(tempVideoPath)
+              .input(finalVideoPath)
               .input(tempAudioPath)
               .outputOptions([
                 '-c:v libx264',
@@ -3501,7 +3501,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
                 '-s 720x1280', // 强制9:16竖屏分辨率
                 '-aspect 9:16', // 设置宽高比
                 '-c:a aac',
-                '-shortest'
+                '-shortest' // 以音频时长为准
               ])
               .output(tempOutputPath)
               .on('end', () => {
@@ -3554,7 +3554,13 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     await contentObj.save();
     
     // 清理临时文件
-    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath];
+    const cleanupFiles = [
+      tempVideoPath, 
+      tempAudioPath, 
+      tempOutputPath,
+      ...(finalVideoPath !== tempVideoPath ? [finalVideoPath] : []), // 如果使用了拼接后的视频，也需要清理
+      ...(finalVideoPath !== tempVideoPath ? [path.join(tempDir, `concat_list_${contentId}_${timestamp}.txt`)] : []) // 清理concat列表文件
+    ].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
         await fs.unlink(filePath);
