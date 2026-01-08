@@ -3203,6 +3203,23 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       }
       
       console.log('✅ 英文音频生成完成，URL:', englishAudioUrl);
+    } catch (tencentError) {
+      console.error('❌ 腾讯云TTS生成英文音频失败:', tencentError);
+      console.error('❌ 错误详情:', JSON.stringify(tencentError, Object.getOwnPropertyNames(tencentError)));
+      
+      const errorMessage = tencentError.message || '';
+      const errorCode = tencentError.code || tencentError.Code || '';
+      
+      // 特殊处理资源包配额用完错误
+      if (errorCode === 'UnsupportedOperation.PkgExhausted' || 
+          (errorMessage.toLowerCase().includes('resource pack') && errorMessage.toLowerCase().includes('exhausted')) ||
+          (errorMessage.toLowerCase().includes('allowance') && errorMessage.toLowerCase().includes('exhausted'))) {
+        throw new Error('腾讯云资源包配额已用完，请前往腾讯云控制台购买"长文本语音合成-精品模型-预付费包"（ModelType: 1）。访问地址：https://console.cloud.tencent.com/tts');
+      }
+      
+      // 其他错误直接抛出原始错误消息
+      throw new Error(`生成英文音频失败: ${errorMessage || '未知错误'}`);
+    }
     
     // 更新内容对象
     contentObj.set('audioUrlEn', englishAudioUrl);
