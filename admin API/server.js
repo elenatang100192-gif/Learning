@@ -77,8 +77,12 @@ app.use(cors({
     callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length'],
+  maxAge: 86400, // 24小时，减少 preflight 请求
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 // 请求体解析
