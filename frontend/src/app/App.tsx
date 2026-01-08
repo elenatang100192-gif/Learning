@@ -102,7 +102,7 @@ function AppContent() {
       )}
       
       {/* 底部导航 */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-zinc-900 border-t border-zinc-800 safe-area-bottom">
+      <div className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-zinc-900 border-t border-zinc-800 safe-area-bottom z-50">
         <div className="flex items-center justify-around h-16 px-4">
           <button
             onClick={() => setCurrentView('home')}

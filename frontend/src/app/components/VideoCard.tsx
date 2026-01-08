@@ -204,8 +204,8 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
       </div>
 
       {/* 进度条 - 抖音风格：正好在底部导航的上边框，不遮挡导航菜单 */}
-      {/* 底部导航菜单高度 h-16 (64px)，进度条位于其顶部边缘，z-index 低于导航菜单 */}
-      <div className="absolute bottom-16 left-0 right-0 z-10 px-4">
+      {/* 底部导航菜单高度 h-16 (64px)，进度条位于其顶部边缘上方 1px，确保不重叠 */}
+      <div className="absolute bottom-[65px] left-0 right-0 z-10 px-4 pointer-events-none">
         <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-200"
@@ -215,9 +215,9 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
       </div>
 
       {/* 底部作者信息区域 - 遮罩从底部导航的上边框开始，不遮挡导航菜单 */}
-      {/* 底部导航菜单高度 h-16 (64px)，遮罩从该位置开始向上渐变，z-index 低于导航菜单 */}
-      <div className="absolute bottom-16 left-0 right-0 z-10 pb-2 px-4">
-        {/* 背景渐变，从底部导航上边框开始，确保文字可见 */}
+      {/* 底部导航菜单高度 h-16 (64px)，遮罩从该位置开始向上渐变，确保不遮挡导航菜单 */}
+      <div className="absolute bottom-16 left-0 right-0 z-10 pb-2 px-4 pointer-events-none">
+        {/* 背景渐变，从底部导航上边框开始，确保文字可见，但不遮挡导航菜单 */}
         <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4">
           {/* 视频信息 - 抖音风格：左侧作者信息 */}
           <div className="text-white">
