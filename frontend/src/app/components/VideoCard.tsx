@@ -195,13 +195,13 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       )}
 
-      {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方，不遮挡导航菜单 */}
-      <div className="absolute right-4 bottom-28 z-20">
+      {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方，确保不遮挡导航菜单 */}
+      <div className="absolute right-4 bottom-32 z-20">
         <VideoInteractions video={video} />
       </div>
 
       {/* 进度条 - 抖音风格：固定在底部导航上方 */}
-      <div className="absolute bottom-24 left-0 right-0 z-20 px-4">
+      <div className="absolute bottom-28 left-0 right-0 z-20 px-4">
         <div className="h-0.5 bg-white/30 rounded-full overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-200"
@@ -210,8 +210,8 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
         </div>
       </div>
 
-      {/* 底部作者信息区域 - 位于底部导航菜单上方 */}
-      <div className="absolute bottom-24 left-0 right-0 z-40 pb-2 px-4">
+      {/* 底部作者信息区域 - 位于底部导航菜单上方，确保不遮挡 */}
+      <div className="absolute bottom-28 left-0 right-0 z-40 pb-2 px-4">
         {/* 背景渐变，确保文字可见 */}
         <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-4 -mx-4 px-4 rounded-t-lg">
           {/* 视频信息 - 抖音风格：左侧作者信息 */}
