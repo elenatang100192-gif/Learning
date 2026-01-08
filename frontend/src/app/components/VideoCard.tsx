@@ -200,10 +200,11 @@ export function VideoCard({ video, isActive, showFollowButton = false }: VideoCa
       )}
 
       {/* 右侧交互按钮 - 抖音风格：固定在右侧，位于底部导航上方，确保不遮挡导航菜单 */}
+      {/* 使用 fixed 定位确保即使滚动时位置也不变 */}
       {/* 底部导航菜单高度 h-16 (64px) + safe-area-bottom (约20-34px) = 约84-98px */}
       {/* 互动按钮总高度：3个按钮(44px*3) + 间距(gap-4 = 16px*2) + 文字高度(约12px*3) = 约180px */}
       {/* 所以需要至少 98px + 180px = 278px 的间距，使用 bottom-52 (208px) 确保完全可见 */}
-      <div className="absolute right-4 bottom-52 z-20">
+      <div className="fixed right-4 bottom-52 z-20 max-w-[480px] mx-auto" style={{ right: 'calc((100% - min(100%, 480px)) / 2 + 16px)' }}>
         <VideoInteractions video={video} />
       </div>
 
