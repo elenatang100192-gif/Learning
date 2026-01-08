@@ -3673,13 +3673,44 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     console.log('✅ 英文视频生成完成');
     
+    // 获取最终视频时长用于返回（在清理临时文件之前）
+    let finalVideoDuration = null;
+    try {
+      finalVideoDuration = await new Promise((resolve) => {
+        ffmpeg.ffprobe(tempOutputPath, (err, metadata) => {
+          if (err) {
+            console.warn('⚠️ 获取最终视频时长失败:', err.message);
+            resolve(null);
+          } else {
+            const duration = metadata.format.duration || 0;
+            const durationMinutes = Math.floor(duration / 60);
+            const durationSeconds = Math.floor(duration % 60);
+            console.log('📹 最终英文视频时长:', duration, '秒', `(${durationMinutes}分${durationSeconds}秒)`);
+            resolve(duration);
+          }
+        });
+      });
+    } catch (err) {
+      console.warn('⚠️ 获取最终视频时长异常:', err.message);
+    }
+    
     res.json({
       success: true,
       data: {
         videoUrlEn: finalVideoUrl,
         audioUrlEn: englishAudioUrl,
         chapterTitleEn: chapterTitleEn,
-        summaryEn: summaryEn
+        summaryEn: summaryEn,
+        audioDuration: {
+          seconds: Math.ceil(audioDuration),
+          formatted: `${Math.floor(audioDuration / 60)}分${Math.floor(audioDuration % 60)}秒`,
+          exact: parseFloat(audioDuration.toFixed(2))
+        },
+        videoDuration: finalVideoDuration ? {
+          seconds: Math.ceil(finalVideoDuration),
+          formatted: `${Math.floor(finalVideoDuration / 60)}分${Math.floor(finalVideoDuration % 60)}秒`,
+          exact: parseFloat(finalVideoDuration.toFixed(2))
+        } : null
       }
     });
     
