@@ -1,7 +1,10 @@
 import AV from 'leancloud-storage';
 
 // 后端API配置（用于某些API调用，支持环境变量）
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.MODE === 'production' 
+    ? 'https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com/api'
+    : 'http://localhost:3001/api');
 
 // 统一的API请求函数
 const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
