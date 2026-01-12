@@ -33,7 +33,11 @@ const allowedOrigins = [
   'http://localhost:5173', // 前端开发环境
   'http://localhost:5175', // 后台管理界面开发环境
   'http://localhost:5176', // 后台管理界面（备用端口）
-  // 从环境变量读取生产环境域名
+  // 生产环境域名（硬编码，确保CORS正常工作）
+  'https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com',
+  'https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin',
+  'https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend',
+  // 从环境变量读取生产环境域名（作为补充）
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   ...(process.env.ADMIN_URL ? [process.env.ADMIN_URL] : []),
 ].filter(Boolean); // 过滤掉undefined值
