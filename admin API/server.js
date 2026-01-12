@@ -27,6 +27,19 @@ const PORT = process.env.PORT || 3001;
 app.use(compression());
 app.use(morgan('combined'));
 
+// 辅助函数：从URL中提取域名（移除路径部分）
+function extractOrigin(url) {
+  if (!url) return null;
+  try {
+    const urlObj = new URL(url);
+    return urlObj.origin; // origin包含协议、域名和端口（如果有）
+  } catch (e) {
+    // 如果不是有效URL，尝试直接提取域名
+    const match = url.match(/^https?:\/\/([^\/]+)/);
+    return match ? `${url.startsWith('https') ? 'https' : 'http'}://${match[1]}` : null;
+  }
+}
+
 // CORS配置（支持生产环境和开发环境）
 const allowedOrigins = [
   'http://localhost:5174', // 前端开发环境
@@ -35,11 +48,9 @@ const allowedOrigins = [
   'http://localhost:5176', // 后台管理界面（备用端口）
   // 生产环境域名（硬编码，确保CORS正常工作）
   'https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com',
-  'https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin',
-  'https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend',
-  // 从环境变量读取生产环境域名（作为补充）
-  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-  ...(process.env.ADMIN_URL ? [process.env.ADMIN_URL] : []),
+  // 从环境变量读取生产环境域名（提取域名部分）
+  ...(process.env.FRONTEND_URL ? [extractOrigin(process.env.FRONTEND_URL)].filter(Boolean) : []),
+  ...(process.env.ADMIN_URL ? [extractOrigin(process.env.ADMIN_URL)].filter(Boolean) : []),
 ].filter(Boolean); // 过滤掉undefined值
 
 app.use(cors({
@@ -60,8 +71,16 @@ app.use(cors({
     }
     
     // 允许所有 CloudBase 静态网站托管域名（无论生产环境还是开发环境）
+    // 注意：origin只包含协议和域名，不包含路径
     if (origin && origin.includes('.tcloudbaseapp.com')) {
       console.log(`✅ CORS: Allowing CloudBase origin: ${origin}`);
+      callback(null, true);
+      return;
+    }
+    
+    // 允许所有 CloudBase Run 域名（云托管服务）
+    if (origin && origin.includes('.sh.run.tcloudbase.com')) {
+      console.log(`✅ CORS: Allowing CloudBase Run origin: ${origin}`);
       callback(null, true);
       return;
     }
@@ -81,8 +100,8 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Length'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Content-Length'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
   maxAge: 86400, // 24小时，减少 preflight 请求
   preflightContinue: false,
   optionsSuccessStatus: 204
@@ -96,8 +115,9 @@ app.use(helmet({
 }));
 
 // 请求体解析（增加限制以支持大文件上传）
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ extended: true, limit: '200mb' }));
+// 注意：对于multipart/form-data（文件上传），限制由multer控制
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
 // 设置全局超时时间为5分钟（300秒）
 app.use((req, res, next) => {
@@ -114,10 +134,26 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// 显式处理OPTIONS预检请求（确保CORS正常工作）
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Content-Length');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400');
+  }
+  res.sendStatus(204);
+});
+
 // API请求日志中间件
 app.use('/api', (req, res, next) => {
   console.log(`🌐 API CALL: ${req.method} ${req.originalUrl}`);
   console.log(`📋 Query:`, JSON.stringify(req.query));
+  if (req.headers.origin) {
+    console.log(`🌐 Origin: ${req.headers.origin}`);
+  }
   next();
 });
 

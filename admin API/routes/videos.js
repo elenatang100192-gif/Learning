@@ -372,10 +372,11 @@ router.post('/publish', async (req, res) => {
   try {
     const { title, titleEn, categoryId, videoUrl, videoUrlEn, coverUrl, duration } = req.body;
 
-    if (!title || !categoryId || (!videoUrl && !videoUrlEn)) {
+    // 验证：必须有标题（title或titleEn至少一个）、分类ID、以及视频URL（videoUrl或videoUrlEn至少一个）
+    if ((!title && !titleEn) || !categoryId || (!videoUrl && !videoUrlEn)) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: title, categoryId, videoUrl or videoUrlEn'
+        message: 'Missing required fields: title or titleEn, categoryId, videoUrl or videoUrlEn'
       });
     }
 
@@ -392,8 +393,9 @@ router.post('/publish', async (req, res) => {
     const VideoClass = AV.Object.extend('Video');
     const video = new VideoClass();
 
-    video.set('title', title);
-    video.set('titleEn', titleEn || '');
+    // 设置标题：如果只有titleEn，则titleEn作为主标题；如果只有title，则title作为主标题
+    video.set('title', title || titleEn || ''); // 至少有一个（已验证）
+    video.set('titleEn', titleEn || title || ''); // 如果只有一个，则两个字段都设置相同的值
     video.set('category', category);
     // 后台管理发布时，如果没有指定author，可以设置为null或使用系统用户
     // 这里先不设置author，如果需要可以后续添加

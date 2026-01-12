@@ -57,7 +57,8 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
+    fileSize: 500 * 1024 * 1024, // 500MB limit (增加以支持更大的视频文件)
+    fieldSize: 10 * 1024 * 1024, // 10MB for non-file fields
   },
   fileFilter: (req, file, cb) => {
     // 检查文件类型
@@ -147,6 +148,10 @@ router.post('/cover', authenticateUser, upload.single('cover'), async (req, res)
 
 // 后台管理上传视频文件（使用Master Key，不需要认证）
 router.post('/admin/video', upload.single('video'), async (req, res) => {
+  // 设置上传请求超时时间为10分钟（视频文件可能较大）
+  req.setTimeout(10 * 60 * 1000);
+  res.setTimeout(10 * 60 * 1000);
+  
   try {
     if (!req.file) {
       return res.status(400).json({
