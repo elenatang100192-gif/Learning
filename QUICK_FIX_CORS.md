@@ -3,7 +3,8 @@
 ## 当前问题
 生产环境后端代码未更新，缺少对前端域名的CORS支持。
 
-**前端域名**: `https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com`  
+**前端域名**: `https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend`  
+**后台管理**: `https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin`  
 **后端API**: `https://video-app-backend-215072-7-1319956699.sh.run.tcloudbase.com`
 
 ## 🎯 最快解决方案（3种方法，任选其一）
@@ -21,8 +22,8 @@
 6. 添加以下环境变量：
 
 ```bash
-ADMIN_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com
-FRONTEND_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com
+ADMIN_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-admin
+FRONTEND_URL=https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com/Video-frontend
 NODE_ENV=production
 ```
 
@@ -104,6 +105,8 @@ curl -X OPTIONS \
 < access-control-allow-origin: https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com
 < access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
 ```
+
+**注意**: CloudBase的 `.tcloudbaseapp.com` 域名支持会匹配整个域名（包括子路径），所以配置基础域名即可。
 
 ### 测试2：查看后端日志
 在腾讯云控制台查看后端日志，应该看到：
