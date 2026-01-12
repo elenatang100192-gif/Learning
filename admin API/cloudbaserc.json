@@ -1,0 +1,28 @@
+{
+  "envId": "video-app-backend-215072-7-1319956699",
+  "framework": {
+    "name": "Learning-Backend",
+    "plugins": {
+      "node": {
+        "use": "@cloudbase/framework-plugin-node",
+        "inputs": {
+          "name": "video-app-backend",
+          "path": "/admin API",
+          "entry": "server.js",
+          "runtime": "Nodejs16",
+          "install": {
+            "command": "npm install --production"
+          },
+          "buildCommand": "",
+          "port": 3001,
+          "envVariables": {
+            "NODE_ENV": "production",
+            "ADMIN_URL": "https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com",
+            "FRONTEND_URL": "https://video-app-env-8gpoewzu84d85ace-1319956699.tcloudbaseapp.com"
+          }
+        }
+      }
+    }
+  }
+}
+
