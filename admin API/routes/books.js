@@ -412,6 +412,10 @@ const tencentTtsClient = new TtsClient({
 
 // 上传电子书文件
 router.post('/upload', upload.single('bookFile'), async (req, res) => {
+  // 设置上传请求超时时间为5分钟
+  req.setTimeout(5 * 60 * 1000);
+  res.setTimeout(5 * 60 * 1000);
+  
   try {
     const { title, author, isbn, categoryId } = req.body;
     const file = req.file;

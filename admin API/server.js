@@ -95,9 +95,16 @@ app.use(helmet({
   contentSecurityPolicy: false // 暂时禁用 CSP，避免影响 API 调用
 }));
 
-// 请求体解析
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// 请求体解析（增加限制以支持大文件上传）
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
+
+// 设置全局超时时间为5分钟（300秒）
+app.use((req, res, next) => {
+  req.setTimeout(5 * 60 * 1000); // 5分钟
+  res.setTimeout(5 * 60 * 1000); // 5分钟
+  next();
+});
 
 // 速率限制
 const limiter = rateLimit({

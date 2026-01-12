@@ -71,6 +71,10 @@ const upload = multer({
 
 // 上传视频文件（需要认证）
 router.post('/video', authenticateUser, upload.single('video'), async (req, res) => {
+  // 设置上传请求超时时间为5分钟
+  req.setTimeout(5 * 60 * 1000);
+  res.setTimeout(5 * 60 * 1000);
+  
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -105,6 +109,10 @@ router.post('/video', authenticateUser, upload.single('video'), async (req, res)
 
 // 上传封面图片（需要认证）
 router.post('/cover', authenticateUser, upload.single('cover'), async (req, res) => {
+  // 设置上传请求超时时间为5分钟
+  req.setTimeout(5 * 60 * 1000);
+  res.setTimeout(5 * 60 * 1000);
+  
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -176,6 +184,10 @@ router.post('/admin/video', upload.single('video'), async (req, res) => {
 
 // 后台管理上传封面图片（使用Master Key，不需要认证）
 router.post('/admin/cover', upload.single('cover'), async (req, res) => {
+  // 设置上传请求超时时间为5分钟
+  req.setTimeout(5 * 60 * 1000);
+  res.setTimeout(5 * 60 * 1000);
+  
   try {
     if (!req.file) {
       return res.status(400).json({
