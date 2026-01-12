@@ -1063,9 +1063,9 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     console.log('🎵 调用腾讯云长文本语音合成API（精品模型-大模型音色），文本长度:', text.length, '语言:', language);
     
     // 根据语言选择音色类型
-    // 中文音色：601013（长文本语音合成专用音色）
-    // 英文音色：301001（长文本语音合成专用音色）
-    const voiceType = isEnglish ? 301001 : 601013; // 英文使用301001，中文使用601013（长文本语音合成专用音色）
+    // 中文音色：601001（长文本语音合成专用音色）
+    // 英文音色：501008（长文本语音合成专用音色）
+    const voiceType = isEnglish ? 501008 : 601001; // 英文使用501008，中文使用601001（长文本语音合成专用音色）
     console.log(`🎤 选择音色类型: ${voiceType} (${isEnglish ? '英文-长文本语音合成专用音色' : '中文-长文本语音合成专用音色'})`);
     console.log(`📝 生成${isEnglish ? '英文' : '中文'}音频，文本长度: ${text.length}，内容预览: ${text.substring(0, 100)}...`);
     
@@ -1087,7 +1087,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
         ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
         Volume: 0, // 音量：范围[-10, 10]，0为正常音量
         Codec: 'mp3', // 音频格式：mp3、pcm
-        VoiceType: voiceType, // 根据语言选择音色类型：中文601013，英文301001
+        VoiceType: voiceType, // 根据语言选择音色类型：中文601001，英文501008
         SampleRate: 16000, // 采样率：16000或8000
         PrimaryLanguage: isEnglish ? 2 : 1, // 主语言：1-中文，2-英文
         Speed: 0 // 语速：范围[-2, 2]，0为正常语速
@@ -3102,8 +3102,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     });
     
     // 使用长文本API（CreateTtsTask），使用精品模型（大模型音色）
-    // 英文音色：301001（长文本语音合成专用音色）
-    const voiceType = 301001; // 英文-长文本语音合成专用音色
+    // 英文音色：501008（长文本语音合成专用音色）
+    const voiceType = 501008; // 英文-长文本语音合成专用音色
     const modelType = 1; // 精品模型（大模型音色）
     
     console.log(`🎤 使用音色类型: ${voiceType} (英文-长文本语音合成专用音色)`);
@@ -3116,7 +3116,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
       Volume: 0, // 音量：范围[-10, 10]，0为正常音量
       Codec: 'mp3', // 音频格式：mp3、pcm
-      VoiceType: voiceType, // 英文音色：301001
+      VoiceType: voiceType, // 英文音色：501008
       SampleRate: 16000, // 采样率：16000或8000
       PrimaryLanguage: 2, // 主语言：2-英文
       Speed: 0 // 语速：范围[-2, 2]，0为正常语速
