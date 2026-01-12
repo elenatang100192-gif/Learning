@@ -62,6 +62,7 @@ export function BookManagement() {
   const [videoProgressInterval, setVideoProgressInterval] = useState<{ [key: string]: NodeJS.Timeout }>({});
   const [pendingVideos, setPendingVideos] = useState<Video[]>([]); // 待审核视频列表
   const [publishedVideos, setPublishedVideos] = useState<Video[]>([]); // 已发布视频列表
+  const [videoStyleDescription, setVideoStyleDescription] = useState<string>('Anime style, vibrant colors'); // Video style description (shared by all content)
 
   // 加载数据
   useEffect(() => {
@@ -325,7 +326,7 @@ export function BookManagement() {
       
       setVideoProgressInterval(prev => ({ ...prev, [content.id]: progressInterval! }));
       
-      const result = await bookAPI.generateSilentVideo(content.id);
+      const result = await bookAPI.generateSilentVideo(content.id, videoStyleDescription || undefined);
       
       if (progressInterval) {
         clearInterval(progressInterval);
@@ -468,7 +469,7 @@ export function BookManagement() {
         
         setVideoProgressInterval(prev => ({ ...prev, [progressKey]: progressInterval! }));
         
-        const silentVideoResult = await bookAPI.generateSilentVideo(content.id);
+        const silentVideoResult = await bookAPI.generateSilentVideo(content.id, videoStyleDescription || undefined);
         
         if (progressInterval) {
           clearInterval(progressInterval);
@@ -505,15 +506,25 @@ export function BookManagement() {
       const updatedContent = updatedContents.find((c: any) => c.id === content.id);
       
       if (!updatedContent) {
+        console.error('❌ 无法找到更新的内容数据，contentId:', content.id);
         throw new Error('无法找到更新的内容数据');
       }
       
+      console.log('📊 更新后的内容数据:', {
+        id: updatedContent.id,
+        silentVideoUrl: updatedContent.silentVideoUrl ? '存在' : '不存在',
+        audioUrl: updatedContent.audioUrl ? '存在' : '不存在',
+        silentVideoUrlPreview: updatedContent.silentVideoUrl?.substring(0, 50) + '...'
+      });
+      
       if (!updatedContent.silentVideoUrl) {
-        throw new Error('无声视频不存在');
+        console.error('❌ 无声视频URL不存在');
+        throw new Error('无声视频URL不存在，请先生成无声视频');
       }
       
       if (!updatedContent.audioUrl) {
-        throw new Error('中文音频不存在');
+        console.error('❌ 中文音频URL不存在');
+        throw new Error('中文音频URL不存在，请先生成中文音频');
       }
       
       // 启动进度条更新
@@ -1400,6 +1411,27 @@ export function BookManagement() {
                     {/* 生成中文视频按钮和结果展示 */}
                     <div className="space-y-4">
                       <div className="border rounded-lg p-4">
+                        {/* Video Style Description Input */}
+                        <div className="mb-4">
+                          <Label htmlFor={`video-style-${content.id}`} className="text-sm font-medium mb-2 block">
+                            Video Style Description
+                          </Label>
+                          <Textarea
+                            id={`video-style-${content.id}`}
+                            placeholder="e.g., Anime style, vibrant colors"
+                            value={videoStyleDescription}
+                            onChange={(e) => setVideoStyleDescription(e.target.value)}
+                            className="min-h-[60px]"
+                            disabled={
+                              (generatingVideoId === content.id && generatingVideoLanguage === 'zh') ||
+                              (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ||
+                              generatingSilentVideoId === content.id
+                            }
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            This style description will be added to the video generation prompts
+                          </p>
+                        </div>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">Generate Chinese Video</span>
@@ -1412,6 +1444,7 @@ export function BookManagement() {
                               <Loader className="h-4 w-4 animate-spin text-accent" />
                             ) : null}
                           </div>
+                        </div>
                         <Button 
                             onClick={() => handleGenerateChineseVideo(content)}
                             size="sm"
@@ -1692,7 +1725,6 @@ export function BookManagement() {
                         )}
                       </div>
                     </div>
-                  </div>
                 </Card>
               ))}
 

@@ -1236,47 +1236,47 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     // 处理音频数据：CreateTtsTask API返回的是URL，需要下载
     let buffer;
     
-    // CreateTtsTask API返回的是URL，需要下载
-    let audioUrl = responseData.Audio;
-    if (!audioUrl) {
-      throw new Error('腾讯云API响应中未找到音频URL');
-    }
-    
-    // 验证和修复URL格式
-    if (typeof audioUrl !== 'string') {
-      throw new Error(`音频URL格式错误: ${typeof audioUrl}`);
-    }
-    
-    // 如果URL不是以http://或https://开头，尝试添加https://
-    if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
-      // 如果URL以//开头，添加https:
-      if (audioUrl.startsWith('//')) {
-        audioUrl = 'https:' + audioUrl;
-      } else {
-        // 否则尝试添加https://
-        audioUrl = 'https://' + audioUrl;
+      // CreateTtsTask API返回的是URL，需要下载
+      let audioUrl = responseData.Audio;
+      if (!audioUrl) {
+        throw new Error('腾讯云API响应中未找到音频URL');
       }
-    }
-    
-    // 验证URL格式
-    try {
-      new URL(audioUrl);
-    } catch (urlError) {
-      throw new Error(`音频URL格式无效: ${audioUrl}, 错误: ${urlError.message}`);
-    }
-    
-    console.log('✅ 从响应中获取音频URL:', audioUrl);
-    
-    // 下载音频文件
-    const audioResponse = await fetch(audioUrl);
-    if (!audioResponse.ok) {
-      throw new Error(`下载音频文件失败: ${audioResponse.statusText}`);
-    }
-    
-    const audioBlob = await audioResponse.blob();
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    buffer = Buffer.from(arrayBuffer);
-    console.log('✅ 音频文件下载完成，Buffer长度:', buffer.length);
+      
+      // 验证和修复URL格式
+      if (typeof audioUrl !== 'string') {
+        throw new Error(`音频URL格式错误: ${typeof audioUrl}`);
+      }
+      
+      // 如果URL不是以http://或https://开头，尝试添加https://
+      if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
+        // 如果URL以//开头，添加https:
+        if (audioUrl.startsWith('//')) {
+          audioUrl = 'https:' + audioUrl;
+        } else {
+          // 否则尝试添加https://
+          audioUrl = 'https://' + audioUrl;
+        }
+      }
+      
+      // 验证URL格式
+      try {
+        new URL(audioUrl);
+      } catch (urlError) {
+        throw new Error(`音频URL格式无效: ${audioUrl}, 错误: ${urlError.message}`);
+      }
+      
+      console.log('✅ 从响应中获取音频URL:', audioUrl);
+      
+      // 下载音频文件
+      const audioResponse = await fetch(audioUrl);
+      if (!audioResponse.ok) {
+        throw new Error(`下载音频文件失败: ${audioResponse.statusText}`);
+      }
+      
+      const audioBlob = await audioResponse.blob();
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+      console.log('✅ 音频文件下载完成，Buffer长度:', buffer.length);
     
     // 将音频文件上传到LeanCloud
     const fileName = `audio_${contentId}_${Date.now()}.mp3`;
@@ -1356,6 +1356,15 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
   
   try {
     const { contentId } = req.params;
+    let { styleDescription } = req.body || {}; // 从请求体中获取风格描述
+    
+    // If no style description provided, use default value
+    if (!styleDescription || !styleDescription.trim()) {
+      styleDescription = 'Anime style, vibrant colors';
+      console.log('⚠️ No style description provided, using default:', styleDescription);
+    } else {
+      console.log('🎨 Received style description:', styleDescription);
+    }
     
     // 获取内容信息
     const contentObj = await new AV.Query('ExtractedContent').get(contentId);
@@ -1438,16 +1447,99 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
     const numSegments = 3; // 固定生成3段视频
     console.log('📊 固定生成', numSegments, '段视频（每段', videoSegmentDuration, '秒）');
     
-    // 将文本分段（简单平均分段，固定3段）
-    const textLength = textContent.length;
-    const segmentTextLength = Math.ceil(textLength / numSegments);
-    const textSegments = [];
-    for (let i = 0; i < numSegments; i++) {
-      const start = i * segmentTextLength;
-      const end = Math.min(start + segmentTextLength, textLength);
-      textSegments.push(textContent.substring(start, end));
+    // 步骤1: 使用Deepseek根据Chinese Summary生成3个视频画面提示词
+    console.log('🤖 步骤1: 使用Deepseek生成3个视频画面提示词...');
+    console.log('📝 Chinese Summary内容:', textContent);
+    
+    let videoPrompts = [];
+    try {
+      const deepseekPrompt = `请根据以下中文内容，生成3个适合用于视频画面的视觉描述提示词。每个提示词应该简洁、具体、富有画面感，适合用于文生视频API。
+
+内容摘要：
+${textContent}
+
+要求：
+1. 生成恰好3个提示词
+2. 每个提示词应该描述一个具体的视觉场景或画面
+3. 提示词应该与内容主题相关
+4. 提示词长度适中（20-50字）
+5. 避免抽象概念，注重具体可视化的描述
+
+请以JSON格式返回，格式如下：
+{
+  "prompts": ["提示词1", "提示词2", "提示词3"]
+}`;
+
+      const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'user',
+              content: deepseekPrompt
+            }
+          ],
+          temperature: 0.7
+        })
+      });
+
+      if (!deepseekResponse.ok) {
+        const errorText = await deepseekResponse.text();
+        console.error('❌ Deepseek API返回错误:', deepseekResponse.status, errorText);
+        throw new Error(`Deepseek API错误: ${deepseekResponse.status} - ${errorText}`);
+      }
+
+      const deepseekData = await deepseekResponse.json();
+      const deepseekContent = deepseekData.choices[0].message.content;
+      console.log('📥 Deepseek API原始响应:', deepseekContent);
+
+      // 解析JSON响应
+      const jsonMatch = deepseekContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsedData = JSON.parse(jsonMatch[0]);
+        videoPrompts = parsedData.prompts || [];
+      }
+
+      // 确保有恰好3个提示词
+      if (videoPrompts.length !== 3) {
+        console.warn('⚠️ Deepseek返回的提示词数量不是3个，使用备用方案');
+        // 备用方案：将文本分段
+        const textLength = textContent.length;
+        const segmentTextLength = Math.ceil(textLength / numSegments);
+        videoPrompts = [];
+        for (let i = 0; i < numSegments; i++) {
+          const start = i * segmentTextLength;
+          const end = Math.min(start + segmentTextLength, textLength);
+          videoPrompts.push(textContent.substring(start, end));
+        }
+      }
+
+      console.log('✅ 成功生成3个视频画面提示词:');
+      videoPrompts.forEach((prompt, index) => {
+        console.log(`   提示词${index + 1}: ${prompt}`);
+      });
+
+    } catch (error) {
+      console.error('❌ 使用Deepseek生成提示词失败:', error.message);
+      console.log('⚠️ 使用备用方案：将文本简单分段');
+      
+      // 备用方案：将文本分段
+      const textLength = textContent.length;
+      const segmentTextLength = Math.ceil(textLength / numSegments);
+      videoPrompts = [];
+      for (let i = 0; i < numSegments; i++) {
+        const start = i * segmentTextLength;
+        const end = Math.min(start + segmentTextLength, textLength);
+        videoPrompts.push(textContent.substring(start, end));
+      }
     }
-    console.log('📊 文本已分为', textSegments.length, '段');
+    
+    console.log('📊 最终使用的', videoPrompts.length, '个视频提示词');
     
     // 生成多段视频
     console.log('🎬 开始生成多段无声视频');
@@ -1496,22 +1588,25 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
     };
     
     // 辅助函数：生成单段视频（带重试机制）
-    const generateVideoSegment = async (segmentText, segmentIndex, retryCount = 0) => {
+    const generateVideoSegment = async (promptText, segmentIndex, retryCount = 0) => {
       const maxRetries = 3;
-      let currentText = segmentText;
+      let currentText = promptText;
       
       // 如果已经重试过，简化文本
       if (retryCount > 0) {
-        currentText = simplifyText(segmentText, retryCount);
+        currentText = simplifyText(promptText, retryCount);
         console.log(`🔄 第 ${segmentIndex + 1}/${numSegments} 段视频重试（第${retryCount}次），简化后文本:`, currentText.substring(0, 50) + '...');
       }
       
       // 根据API文档，使用 --ratio 9:16 --dur 参数格式
       // --ratio 9:16 表示9:16竖屏比例（强制限制）
       // --dur 指定视频时长（秒）
-      // 明确指定动漫风格，色彩鲜艳
-      const styleText = '，动漫风格，色彩鲜艳';
+      // styleDescription在入口处已经保证有值（默认值或用户提供）
+      const finalStyleText = styleDescription.trim();
+      const styleText = `，${finalStyleText}`;
       const promptWithParams = `${currentText}${styleText} --ratio 9:16 --dur ${videoSegmentDuration}`;
+      console.log(`🎨 第 ${segmentIndex + 1}/${numSegments} 段视频提示词:`, currentText);
+      console.log(`🎨 第 ${segmentIndex + 1}/${numSegments} 段视频使用的风格描述:`, finalStyleText);
       
       const textToVideoRequestBody = {
         model: DOUBAO_MODEL_ID,
@@ -1644,7 +1739,7 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
               // 等待2秒后重试
               await new Promise(resolve => setTimeout(resolve, 2000));
               // 递归调用，增加重试次数
-              return generateVideoSegment(segmentText, segmentIndex, retryCount + 1);
+              return generateVideoSegment(promptText, segmentIndex, retryCount + 1);
             } else {
               // 重试次数用完，抛出错误
               throw new Error(`视频生成失败：内容可能包含敏感信息，已尝试简化文本${maxRetries}次仍失败。请手动修改文本内容后重试。错误详情: ${errorMsg}`);
@@ -1663,10 +1758,11 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
       return segmentVideoUrl;
     };
     
-    // 生成所有视频段
+    // 步骤2: 使用豆包根据提示词和风格描述生成3个视频
+    console.log('🎬 步骤2: 使用豆包生成3个视频...');
     for (let i = 0; i < numSegments; i++) {
-      console.log(`📹 生成第 ${i + 1}/${numSegments} 段视频...`);
-      const segmentVideoUrl = await generateVideoSegment(textSegments[i], i);
+      console.log(`📹 生成第 ${i + 1}/${numSegments} 段视频，使用提示词: ${videoPrompts[i]}`);
+      const segmentVideoUrl = await generateVideoSegment(videoPrompts[i], i);
       videoSegmentUrls.push(segmentVideoUrl);
     }
     
@@ -1751,7 +1847,8 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
         .run();
     });
     
-    // 获取拼接后视频的时长
+    // 步骤3: 根据音频时长拼接3个视频并重复拼接
+    console.log('🔄 步骤3: 根据音频时长拼接并重复视频...');
     console.log('📏 获取拼接后视频的时长...');
     const concatenatedVideoDuration = await new Promise((resolve, reject) => {
       ffmpeg.ffprobe(concatenatedVideoPath, (err, metadata) => {
@@ -1998,19 +2095,46 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     const timestamp = Date.now();
     
     // 下载无声视频
+    // 注意：不要修改URL的大小写，LeanCloud的域名是大小写敏感的
     let finalSilentVideoUrl = silentVideoUrl;
+    // 只将http替换为https，但保持域名的大小写
     if (finalSilentVideoUrl.startsWith('http://')) {
-      finalSilentVideoUrl = finalSilentVideoUrl.replace('http://', 'https://');
+      finalSilentVideoUrl = finalSilentVideoUrl.replace(/^http:\/\//, 'https://');
     }
     tempVideoPath = path.join(tempDir, `silent_video_${contentId}_${timestamp}.mp4`);
     console.log('📥 开始下载无声视频:', finalSilentVideoUrl);
+    console.log('📊 无声视频URL类型:', typeof finalSilentVideoUrl);
+    console.log('📊 无声视频URL长度:', finalSilentVideoUrl?.length);
+    
+    // 验证URL格式
+    if (!finalSilentVideoUrl || !finalSilentVideoUrl.startsWith('http')) {
+      console.error('❌ 无声视频URL格式无效:', finalSilentVideoUrl);
+      throw new Error(`无声视频URL格式无效: ${finalSilentVideoUrl}`);
+    }
     
     let videoResponse;
     try {
-      videoResponse = await fetch(finalSilentVideoUrl);
+      console.log('🌐 发起fetch请求（超时时间：60秒）...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+      
+      videoResponse = await fetch(finalSilentVideoUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      console.log('✅ fetch请求完成，状态码:', videoResponse.status);
     } catch (fetchError) {
       console.error('❌ 下载无声视频失败（网络错误）:', fetchError);
-      throw new Error(`下载无声视频失败（网络错误）: ${fetchError.message}`);
+      console.error('❌ 错误类型:', fetchError.constructor.name);
+      console.error('❌ 错误代码:', fetchError.code);
+      console.error('❌ 尝试的URL:', finalSilentVideoUrl);
+      console.error('❌ 完整错误:', JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError)));
+      throw new Error(`下载无声视频失败（网络错误）: ${fetchError.message || fetchError.code || '未知错误'}. URL: ${finalSilentVideoUrl.substring(0, 80)}`);
     }
     
     if (!videoResponse.ok) {
@@ -2026,17 +2150,32 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     
     // 下载音频
     let finalAudioUrl = audioUrl;
+    // 只将http替换为https，但保持域名的大小写
     if (finalAudioUrl.startsWith('http://')) {
-      finalAudioUrl = finalAudioUrl.replace('http://', 'https://');
+      finalAudioUrl = finalAudioUrl.replace(/^http:\/\//, 'https://');
     }
     tempAudioPath = path.join(tempDir, `audio_${contentId}_${timestamp}.mp3`);
     console.log('📥 开始下载音频:', finalAudioUrl);
     
     let audioResponse;
     try {
-      audioResponse = await fetch(finalAudioUrl);
+      console.log('🌐 发起音频fetch请求（超时时间：60秒）...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+      
+      audioResponse = await fetch(finalAudioUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      console.log('✅ 音频fetch请求完成，状态码:', audioResponse.status);
     } catch (fetchError) {
       console.error('❌ 下载音频失败（网络错误）:', fetchError);
+      console.error('❌ 尝试的URL:', finalAudioUrl);
       throw new Error(`下载音频失败（网络错误）: ${fetchError.message}`);
     }
     
@@ -3087,20 +3226,20 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.log('📝 文本长度:', audioText.length, '字符');
     
     // 初始化腾讯云TTS客户端
-    const TtsClient = tencentcloud.tts.v20190823.Client;
-    const tencentTtsClient = new TtsClient({
-      credential: {
+      const TtsClient = tencentcloud.tts.v20190823.Client;
+      const tencentTtsClient = new TtsClient({
+        credential: {
         secretId: process.env.TENCENT_SECRET_ID,
         secretKey: process.env.TENCENT_SECRET_KEY,
-      },
-      region: 'ap-guangzhou',
-      profile: {
-        httpProfile: {
-          endpoint: 'tts.tencentcloudapi.com',
         },
-      },
-    });
-    
+        region: 'ap-guangzhou',
+        profile: {
+          httpProfile: {
+            endpoint: 'tts.tencentcloudapi.com',
+          },
+        },
+      });
+      
     // 使用长文本API（CreateTtsTask），使用精品模型（大模型音色）
     // 英文音色：501008（长文本语音合成专用音色）
     const voiceType = 501008; // 英文-长文本语音合成专用音色
@@ -3111,7 +3250,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     // 按照腾讯云API文档格式设置参数
     const longTextParams = {
-      Text: audioText,
+        Text: audioText,
       ProjectId: 0, // 项目ID，0表示默认项目
       ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
       Volume: 0, // 音量：范围[-10, 10]，0为正常音量

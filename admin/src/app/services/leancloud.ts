@@ -525,11 +525,12 @@ export const bookAPI = {
   },
 
   // 生成无声视频（步骤2）
-  async generateSilentVideo(contentId: string) {
+  async generateSilentVideo(contentId: string, styleDescription?: string) {
     try {
-      console.log(`📞 调用生成无声视频API: contentId=${contentId}`);
+      console.log(`📞 调用生成无声视频API: contentId=${contentId}, styleDescription=${styleDescription}`);
       const response = await apiRequest(`/books/content/${contentId}/generate-silent-video`, {
         method: 'POST',
+        body: JSON.stringify({ styleDescription }),
       });
       console.log(`✅ 生成无声视频API响应:`, response);
       if (!response.success) {
