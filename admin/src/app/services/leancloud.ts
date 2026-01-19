@@ -77,19 +77,7 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
 
     return response.json();
   } catch (error: any) {
-    // 处理网络错误
-    if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-      console.error(`❌ 网络请求失败: ${url}`);
-      console.error('💡 可能的原因:');
-      console.error('   1. 后端服务未运行 (http://localhost:3001)');
-      console.error('   2. CORS配置问题');
-      console.error('   3. 网络连接问题');
-      console.error('   4. 后端服务崩溃或重启中');
-      console.error('错误详情:', error);
-      throw new Error(`无法连接到后端服务器 (${API_BASE_URL})，请确保后端服务正在运行`);
-    }
-    
-    // 特殊处理AbortError（超时错误）
+    // 特殊处理AbortError（超时错误）- 优先处理
     if (error.name === 'AbortError') {
       console.error(`⏰ 请求超时: ${url} (${timeout / 1000}秒)`);
       if (isLongRunningOperation) {
@@ -97,6 +85,26 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
       } else {
         throw new Error(`请求超时（${timeout / 1000}秒）。请检查网络连接或稍后重试。`);
       }
+    }
+    
+    // 处理真正的网络连接错误（没有成功建立连接）
+    // 只有在真正的网络错误时才显示"无法连接"，业务错误（有response但状态码不对）不应该显示这个
+    if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+      console.error(`❌ 网络请求失败: ${url}`);
+      console.error('💡 可能的原因:');
+      console.error('   1. 后端服务未运行');
+      console.error('   2. CORS配置问题');
+      console.error('   3. 网络连接问题');
+      console.error('   4. 后端服务崩溃或重启中');
+      console.error('错误详情:', error);
+      throw new Error(`无法连接到后端服务器 (${API_BASE_URL})，请确保后端服务正在运行`);
+    }
+    
+    // 如果是业务错误（来自response的错误，已经有明确的错误信息），直接抛出
+    // 这些错误不应该被当作网络错误处理
+    if (error.message && error.errorData) {
+      // 这是从response中解析出的业务错误，直接抛出
+      throw error;
     }
     
     // 如果是其他错误，也记录详细信息
@@ -965,9 +973,9 @@ export const userAPI = {
       return response.success ? response.data : [];
     } catch (error: any) {
       console.error('获取用户列表失败:', error);
-      // 如果是网络错误，提供更详细的错误信息
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        throw new Error('无法连接到后端服务器，请确保后端服务正在运行（http://localhost:3001）');
+      // 只处理真正的网络连接错误，业务错误直接抛出
+      if (error.name === 'TypeError' && (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError'))) {
+        throw new Error(`无法连接到后端服务器 (${API_BASE_URL})，请确保后端服务正在运行`);
       }
       throw error;
     }
