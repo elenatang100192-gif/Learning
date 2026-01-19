@@ -2830,12 +2830,11 @@ function convertAsrResultToSRT(resultText) {
       
       // 尝试提取words数组（包含时间戳的单词）
       if (parsedData.words && Array.isArray(parsedData.words)) {
-        // 直接使用ASR返回的单词时间戳，不按标点符号分段
-        // 将连续的单词组合成合理的字幕块（每3-5个单词一组，或根据时间间隔）
+        // 直接使用ASR返回的单词时间戳，完全按照音频时间同步，不限制字数
+        // 只根据时间间隔来分段，确保字幕与音频完全同步
         const subtitleBlocks = [];
         let currentBlock = { words: [], startTime: null, endTime: null };
-        const MAX_WORDS_PER_BLOCK = 5; // 每个字幕块最多5个单词
-        const MAX_TIME_GAP = 0.5; // 如果单词间隔超过0.5秒，开始新的字幕块
+        const MAX_TIME_GAP = 0.5; // 如果单词间隔超过0.5秒，开始新的字幕块（仅用于自然分段）
         
         for (let i = 0; i < parsedData.words.length; i++) {
           const word = parsedData.words[i];
@@ -2843,14 +2842,14 @@ function convertAsrResultToSRT(resultText) {
           const wordEndTime = word.end_time !== undefined ? word.end_time / 1000 : null;
           const wordText = word.word || word.text || '';
           
-          // 检查是否需要开始新的字幕块
+          // 检查是否需要开始新的字幕块（仅根据时间间隔，不限制字数）
           if (currentBlock.words.length > 0) {
             const timeGap = wordStartTime !== null && currentBlock.endTime !== null 
               ? wordStartTime - currentBlock.endTime 
               : 0;
             
-            // 如果单词间隔太大，或者当前块已经有足够单词，开始新块
-            if (timeGap > MAX_TIME_GAP || currentBlock.words.length >= MAX_WORDS_PER_BLOCK) {
+            // 如果单词间隔太大，开始新块（不限制字数，确保同步）
+            if (timeGap > MAX_TIME_GAP) {
               if (currentBlock.words.length > 0 && currentBlock.startTime !== null) {
                 subtitleBlocks.push({
                   text: currentBlock.words.join(''),
@@ -2862,7 +2861,7 @@ function convertAsrResultToSRT(resultText) {
             }
           }
           
-          // 添加单词到当前块
+          // 添加单词到当前块（不限制字数）
           if (wordText.trim().length > 0) {
             if (currentBlock.startTime === null && wordStartTime !== null) {
               currentBlock.startTime = wordStartTime;
@@ -2883,7 +2882,7 @@ function convertAsrResultToSRT(resultText) {
           });
         }
         
-        // 生成SRT
+        // 生成SRT（完全按照ASR返回的时间戳，不限制字数）
         for (const block of subtitleBlocks) {
           srtContent += `${index}\n`;
           srtContent += `${formatSRTTime(block.startTime)} --> ${formatSRTTime(block.endTime)}\n`;
