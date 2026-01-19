@@ -774,7 +774,8 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
       console.log('📝 使用自定义提示词:', prompt);
     } else {
       // 使用中英文混合提示词，明确要求只显示书名和作者，不显示其他文字
-      prompt = `A book cover design, 9:16 vertical ratio, high quality, professional design. The cover must ONLY display the book title "${titleText}" and author name "${authorText}". Absolutely no other Chinese or English text, no descriptions, no subtitles, no additional information should appear on the cover. Book style, elegant design, clean layout, minimalist style, only title and author name visible`;
+      // 使用negative prompt明确禁止其他文字
+      prompt = `A minimalist book cover design, 9:16 vertical ratio, high quality, professional design. The cover must ONLY display the book title "${titleText}" and author name "${authorText}". Absolutely no other Chinese or English text, no descriptions, no subtitles, no additional information, no quotes, no taglines, no promotional text should appear on the cover. Book style, elegant design, clean layout, minimalist style, only title and author name visible. Negative prompt: no text except title and author, no descriptions, no subtitles, no quotes, no taglines, no promotional text, no additional information`;
       console.log('📝 使用默认提示词:', prompt);
     }
     
@@ -894,16 +895,57 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
 
 // 使用Deepseek拆解书籍内容
 router.post('/:bookId/extract', async (req, res) => {
+  // 立即设置CORS头
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
+  res.header('Content-Type', 'text/event-stream');
+  res.header('Cache-Control', 'no-cache');
+  res.header('Connection', 'keep-alive');
+  res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+  
+  // 发送进度更新的辅助函数
+  const sendProgress = (message, progress = null) => {
+    try {
+      const data = JSON.stringify({ message, progress, timestamp: Date.now() });
+      res.write(`data: ${data}\n\n`);
+      console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
+    } catch (err) {
+      console.error('❌ 发送进度更新失败:', err);
+    }
+  };
+  
+  // 发送心跳以保持连接活跃（每30秒发送一次）
+  const heartbeatInterval = setInterval(() => {
+    try {
+      res.write(`: heartbeat\n\n`);
+    } catch (err) {
+      clearInterval(heartbeatInterval);
+    }
+  }, 30000);
+  
+  // 清理函数
+  const cleanup = () => {
+    clearInterval(heartbeatInterval);
+  };
+  
   try {
     const { bookId } = req.params;
     const { segments = 10 } = req.body; // 默认10段
 
     if (![5, 10, 20, 30].includes(segments)) {
-      return res.status(400).json({
-        success: false,
-        message: '分段数量必须是5、10、20或30'
-      });
+      cleanup();
+      const errorData = JSON.stringify({ success: false, message: '分段数量必须是5、10、20或30', completed: true });
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+      return;
     }
+    
+    sendProgress('开始处理书籍提取请求', 0);
 
     // 获取书籍信息
     const book = await new AV.Query('Book').get(bookId);
@@ -929,18 +971,21 @@ router.post('/:bookId/extract', async (req, res) => {
 
     // 从附件文件提取文本内容
     console.log('📖 开始从附件文件提取文本内容...');
+    sendProgress('正在提取文件文本内容', 10);
     let bookContent;
     try {
       bookContent = await extractTextFromFile(fileUrl);
       console.log('✅ 文本内容提取成功，长度:', bookContent.length);
+      sendProgress('文本内容提取完成', 20);
     } catch (error) {
+      cleanup();
       console.error('❌ 提取文件内容失败:', error);
       book.set('status', '待处理');
       await book.save();
-      return res.status(500).json({
-        success: false,
-        message: `提取文件内容失败: ${error.message}`
-      });
+      const errorData = JSON.stringify({ success: false, message: `提取文件内容失败: ${error.message}`, completed: true });
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+      return;
     }
 
     // 调用Deepseek API拆解书籍（基于文件内容）
@@ -1015,6 +1060,7 @@ Return in JSON format:
     console.log('📞 Deepseek API URL:', DEEPSEEK_API_URL);
     console.log('📞 Deepseek API Key前4位:', DEEPSEEK_API_KEY ? DEEPSEEK_API_KEY.substring(0, 4) : '未设置');
     
+    sendProgress('正在调用Deepseek API分析书籍内容', 30);
     let deepseekResponse;
     try {
       deepseekResponse = await fetch(DEEPSEEK_API_URL, {
@@ -1052,6 +1098,7 @@ Return in JSON format:
     const content = deepseekData.choices[0].message.content;
     
     console.log('📥 Deepseek API原始响应（前500字符）:', content.substring(0, 500) + '...');
+    sendProgress('Deepseek API分析完成，正在解析结果', 50);
 
     // 解析JSON响应（可能包含markdown代码块）
     let segmentsData;
@@ -1085,10 +1132,15 @@ Return in JSON format:
     }
 
     // 保存提取的内容到数据库
+    sendProgress('正在保存提取的内容到数据库', 60);
     const ExtractedContentClass = AV.Object.extend('ExtractedContent');
     const savedSegments = [];
+    const totalSegments = segmentsData.segments?.length || 0;
 
-    for (const segment of segmentsData.segments || []) {
+    for (let i = 0; i < (segmentsData.segments || []).length; i++) {
+      const segment = segmentsData.segments[i];
+      const segmentProgress = 60 + Math.floor((i / totalSegments) * 30);
+      sendProgress(`正在保存第 ${i + 1}/${totalSegments} 段内容`, segmentProgress);
       // 处理summary（中文），确保严格200字，提取核心思想和精华
       let summary = segment.summary || '';
       
@@ -1271,14 +1323,22 @@ Return in JSON format:
     book.set('status', '已完成');
     await book.save();
 
-    res.json({
+    // 发送完成消息（SSE格式）
+    cleanup();
+    sendProgress('书籍提取完成', 100);
+    const responseData = {
       success: true,
       data: {
         bookId: book.id,
         segments: savedSegments
-      }
-    });
+      },
+      completed: true
+    };
+    const finalData = JSON.stringify(responseData);
+    res.write(`data: ${finalData}\n\n`);
+    res.end();
   } catch (error) {
+    cleanup();
     console.error('❌ 拆解书籍失败:', error);
     console.error('❌ 错误堆栈:', error.stack);
     console.error('❌ 错误详情:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
@@ -1295,41 +1355,28 @@ Return in JSON format:
       console.error('❌ 更新书籍状态失败:', updateError);
     }
 
+    // 发送错误消息（SSE格式）
+    let errorMessage = '拆解书籍失败';
+    let errorSuggestion = '';
+    
     // 检查是否是网络错误
     if (error.message && (error.message.includes('fetch failed') || error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT'))) {
-      return res.status(500).json({
-        success: false,
-        message: '无法连接到Deepseek API，请检查网络连接或API配置',
-        error: error.message,
-        suggestion: '请检查DEEPSEEK_API_KEY是否正确配置'
-      });
+      errorMessage = '无法连接到Deepseek API，请检查网络连接或API配置';
+      errorSuggestion = '请检查DEEPSEEK_API_KEY是否正确配置';
+    } else if (error.message && error.message.includes('Deepseek API')) {
+      errorMessage = 'Deepseek API调用失败';
+      errorSuggestion = '请检查DEEPSEEK_API_KEY是否正确，或查看Deepseek API服务状态';
+    } else if (error.message && (error.message.includes('JSON') || error.message.includes('解析'))) {
+      errorMessage = '无法解析AI返回的内容';
+      errorSuggestion = 'AI返回的内容格式不正确，请重试';
     }
 
-    // 检查是否是API错误
-    if (error.message && error.message.includes('Deepseek API')) {
-      return res.status(500).json({
-        success: false,
-        message: 'Deepseek API调用失败',
-        error: error.message,
-        suggestion: '请检查DEEPSEEK_API_KEY是否正确，或查看Deepseek API服务状态'
-      });
-    }
-
-    // 检查是否是JSON解析错误
-    if (error.message && (error.message.includes('JSON') || error.message.includes('解析'))) {
-      return res.status(500).json({
-        success: false,
-        message: '无法解析AI返回的内容',
-        error: error.message,
-        suggestion: 'AI返回的内容格式不正确，请重试'
-      });
-    }
-
-    // 返回详细的错误信息
     const errorResponse = {
       success: false,
-      message: '拆解书籍失败',
-      error: error.message || String(error)
+      message: errorMessage,
+      error: error.message || String(error),
+      suggestion: errorSuggestion,
+      completed: true
     };
     
     // 在开发环境下返回更多调试信息
@@ -1338,7 +1385,9 @@ Return in JSON format:
       errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
     }
     
-    res.status(500).json(errorResponse);
+    const errorData = JSON.stringify(errorResponse);
+    res.write(`data: ${errorData}\n\n`);
+    res.end();
   }
 });
 
@@ -2645,21 +2694,42 @@ async function generateSubtitleFile(audioUrl, language, tempDir, contentId, time
       resultText = resultText.Text || resultText.Result || JSON.stringify(resultText);
     }
     
+    // 确保resultText是UTF-8编码的字符串
+    // 如果是Buffer，转换为UTF-8字符串
+    if (Buffer.isBuffer(resultText)) {
+      resultText = resultText.toString('utf8');
+    } else if (typeof resultText !== 'string') {
+      resultText = String(resultText);
+    }
+    
+    // 确保字符串是有效的UTF-8编码
+    // 移除无效的UTF-8序列，避免乱码
+    try {
+      // 尝试将字符串编码为Buffer再解码，确保UTF-8有效性
+      const buffer = Buffer.from(resultText, 'utf8');
+      resultText = buffer.toString('utf8');
+    } catch (e) {
+      console.warn('⚠️ UTF-8编码转换警告:', e.message);
+    }
+    
     if (!resultText || (typeof resultText === 'string' && resultText.trim().length === 0)) {
       throw new Error('ASR识别结果为空');
     }
     
     console.log('📝 ASR识别结果文本:', typeof resultText === 'string' ? resultText.substring(0, 500) : JSON.stringify(resultText).substring(0, 500));
+    console.log('📝 ASR识别结果编码检查: UTF-8字符串，长度', resultText.length);
     
     // 将识别结果转换为SRT格式
     const srtPath = path.join(tempDir, `subtitle_${contentId}_${language}_${timestamp}.srt`);
     const srtContent = convertAsrResultToSRT(resultText);
     
     // 确保使用UTF-8 BOM编码，避免中文乱码
-    const BOM = '\uFEFF';
-    const srtContentWithBOM = BOM + srtContent;
+    // 使用Buffer确保UTF-8 BOM正确写入
+    const BOM = Buffer.from('\uFEFF', 'utf8');
+    const srtContentBuffer = Buffer.from(srtContent, 'utf8');
+    const srtContentWithBOM = Buffer.concat([BOM, srtContentBuffer]);
     
-    await fs.writeFile(srtPath, srtContentWithBOM, { encoding: 'utf8' });
+    await fs.writeFile(srtPath, srtContentWithBOM);
     console.log(`✅ 字幕文件生成成功: ${srtPath}`);
     console.log(`📝 字幕文件编码: UTF-8 with BOM`);
     console.log(`📝 字幕内容预览（前200字符）: ${srtContent.substring(0, 200)}`);
@@ -4582,6 +4652,37 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   
+  // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
+  res.header('Content-Type', 'text/event-stream');
+  res.header('Cache-Control', 'no-cache');
+  res.header('Connection', 'keep-alive');
+  res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+  
+  // 发送进度更新的辅助函数
+  const sendProgress = (message, progress = null) => {
+    try {
+      const data = JSON.stringify({ message, progress, timestamp: Date.now() });
+      res.write(`data: ${data}\n\n`);
+      console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
+    } catch (err) {
+      console.error('❌ 发送进度更新失败:', err);
+    }
+  };
+  
+  // 发送心跳以保持连接活跃（每30秒发送一次）
+  const heartbeatInterval = setInterval(() => {
+    try {
+      res.write(`: heartbeat\n\n`);
+    } catch (err) {
+      clearInterval(heartbeatInterval);
+    }
+  }, 30000);
+  
+  // 清理函数
+  const cleanup = () => {
+    clearInterval(heartbeatInterval);
+  };
+  
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
@@ -4593,6 +4694,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.log('🚀 ========== 生成英文视频API被调用 ==========');
     console.log('🌐 Origin:', origin);
     console.log('📥 contentId:', contentId);
+    
+    sendProgress('开始处理英文视频生成请求', 0);
     
     // 获取内容对象
     const contentObj = await new AV.Query('ExtractedContent').get(contentId);
@@ -4643,6 +4746,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     // 如果缺少英文翻译，使用Deepseek翻译
     if (!chapterTitleEn || !summaryEn) {
       console.log('🌐 开始使用Deepseek翻译内容...');
+      sendProgress('正在翻译内容为英文', 10);
       
       // 翻译标题
       if (!chapterTitleEn && chapterTitle) {
@@ -5453,7 +5557,10 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     console.log('✅ 英文视频生成完成');
     
-    res.json({
+    // 发送完成消息（SSE格式）
+    cleanup();
+    sendProgress('英文视频生成完成', 100);
+    const responseData = {
       success: true,
       data: {
         videoUrlEn: finalVideoUrl,
@@ -5462,10 +5569,15 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         summaryEn: summaryEn,
         contentId: contentId,
         language: 'en'
-      }
-    });
+      },
+      completed: true
+    };
+    const finalData = JSON.stringify(responseData);
+    res.write(`data: ${finalData}\n\n`);
+    res.end();
     
   } catch (error) {
+    cleanup();
     console.error('❌ 生成英文视频失败:', error);
     console.error('❌ 错误堆栈:', error.stack);
     
@@ -5483,7 +5595,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     if (!res.headersSent) {
       // 更新状态为失败
       try {
-        const content = await new AV.Query('ExtractedContent').get(contentId);
+        const content = await new AV.Query('ExtractedContent').get(req.params.contentId);
         if (content) {
           content.set('videoStatus', 'failed');
           await content.save();
@@ -5492,11 +5604,25 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         console.error('❌ 更新内容状态失败:', updateError);
       }
 
-      res.status(500).json({
+      // 发送错误消息（SSE格式）
+      const errorResponse = {
         success: false,
         message: `生成英文视频失败: ${error.message}`,
-        error: error.message
-      });
+        error: error.message || String(error),
+        completed: true
+      };
+      
+      // 在开发环境下返回更多调试信息
+      if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+        errorResponse.stack = error.stack;
+        errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
+      }
+      
+      const errorData = JSON.stringify(errorResponse);
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+    } else {
+      console.error('❌ 响应已发送，无法发送错误响应');
     }
   }
 });
