@@ -2540,6 +2540,27 @@ ${textContent}
 // 字幕提前量（秒），让字幕提前出现以匹配音频
 const SUBTITLE_ADVANCE_TIME = 0.7; // 提前0.7秒，增加提前量以改善同步
 
+// 转义字幕文件路径，用于FFmpeg subtitles滤镜
+// 在Docker容器中，路径需要特殊处理以确保FFmpeg能正确读取
+function escapeSubtitlePath(filePath) {
+  if (!filePath) return '';
+  
+  // 统一使用正斜杠（Docker容器中使用正斜杠）
+  let escaped = filePath.replace(/\\/g, '/');
+  
+  // FFmpeg subtitles滤镜路径转义规则：
+  // 1. 在单引号字符串中，单引号需要转义为 '\''
+  // 2. 冒号、方括号、逗号等特殊字符在路径中不需要转义（除非在filter表达式中）
+  // 3. 确保路径是绝对路径或相对于工作目录的路径
+  
+  // 转义单引号（在单引号字符串中）
+  escaped = escaped.replace(/'/g, "'\\''");
+  
+  console.log(`📝 字幕路径转义: 原始=${filePath}, 转义后=${escaped}`);
+  
+  return escaped;
+}
+
 async function generateSubtitleFile(audioUrl, language, tempDir, contentId, timestamp) {
   try {
     console.log(`📝 开始使用腾讯云ASR生成${language === 'zh' ? '中文' : '英文'}字幕，音频URL: ${audioUrl}`);
@@ -3552,6 +3573,20 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     tempOutputPath = path.join(tempDir, `output_${contentId}_${language}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频' + (tempSubtitlePath ? '（包含字幕）' : ''));
     
+    // 如果有字幕文件，先验证文件是否存在
+    if (tempSubtitlePath) {
+      try {
+        await fs.access(tempSubtitlePath);
+        const stats = await fs.stat(tempSubtitlePath);
+        console.log('✅ 字幕文件存在，路径:', tempSubtitlePath);
+        console.log('✅ 字幕文件大小:', stats.size, '字节');
+      } catch (accessError) {
+        console.error('❌ 字幕文件不存在或无法访问:', tempSubtitlePath);
+        console.error('❌ 错误详情:', accessError.message);
+        throw new Error(`字幕文件不存在: ${tempSubtitlePath}`);
+      }
+    }
+    
     await new Promise((resolve, reject) => {
       let timeoutId = null;
       const timeout = 300000; // 5分钟超时
@@ -3563,13 +3598,16 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       // 如果有字幕文件，添加字幕滤镜
       if (tempSubtitlePath) {
         console.log('📝 添加字幕到视频:', tempSubtitlePath);
+        const escapedSubtitlePath = escapeSubtitlePath(tempSubtitlePath);
+        console.log('📝 转义后的字幕路径:', escapedSubtitlePath);
+        
         ffmpegProcess = ffmpegProcess
           .complexFilter([
             // 缩放视频
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
             // 使用charset=utf8参数确保正确读取UTF-8编码的字幕文件，避免中文乱码
-            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+            `[v]subtitles='${escapedSubtitlePath}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -3619,7 +3657,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -5194,6 +5232,20 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     tempOutputPath = path.join(tempDir, `output_en_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频' + (tempSubtitlePath ? '（包含字幕）' : ''));
     
+    // 如果有字幕文件，先验证文件是否存在
+    if (tempSubtitlePath) {
+      try {
+        await fs.access(tempSubtitlePath);
+        const stats = await fs.stat(tempSubtitlePath);
+        console.log('✅ 字幕文件存在，路径:', tempSubtitlePath);
+        console.log('✅ 字幕文件大小:', stats.size, '字节');
+      } catch (accessError) {
+        console.error('❌ 字幕文件不存在或无法访问:', tempSubtitlePath);
+        console.error('❌ 错误详情:', accessError.message);
+        throw new Error(`字幕文件不存在: ${tempSubtitlePath}`);
+      }
+    }
+    
     await new Promise((resolve, reject) => {
       let timeoutId = null;
       const timeout = 300000; // 5分钟超时
@@ -5205,13 +5257,16 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       // 如果有字幕文件，添加字幕滤镜
       if (tempSubtitlePath) {
         console.log('📝 添加字幕到视频:', tempSubtitlePath);
+        const escapedSubtitlePath = escapeSubtitlePath(tempSubtitlePath);
+        console.log('📝 转义后的字幕路径:', escapedSubtitlePath);
+        
         ffmpegProcess = ffmpegProcess
           .complexFilter([
             // 缩放视频
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
             // 使用charset=utf8参数确保正确读取UTF-8编码的字幕文件，避免中文乱码
-            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+            `[v]subtitles='${escapedSubtitlePath}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -5261,7 +5316,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
