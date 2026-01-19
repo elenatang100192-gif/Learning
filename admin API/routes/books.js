@@ -3766,10 +3766,10 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             // 缩放视频
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
-            // 注意：移除charset=utf8参数，因为某些FFmpeg版本不支持此参数
-            // 字幕文件已使用UTF-8 BOM编码，FFmpeg会自动识别
+            // 显式指定输入编码为UTF-8，确保中文字幕正确显示
+            // 字幕文件已使用UTF-8 BOM编码，但显式指定input_encoding更可靠
             // 简化force_style参数，只保留最常用和兼容性好的参数
-            `[v]subtitles='${escapedSubtitlePath}':force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+            `[v]subtitles='${escapedSubtitlePath}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -3821,7 +3821,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -5498,10 +5498,10 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
             // 缩放视频
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
-            // 注意：移除charset=utf8参数，因为某些FFmpeg版本不支持此参数
-            // 字幕文件已使用UTF-8 BOM编码，FFmpeg会自动识别
+            // 显式指定输入编码为UTF-8，确保中文字幕正确显示
+            // 字幕文件已使用UTF-8 BOM编码，但显式指定input_encoding更可靠
             // 简化force_style参数，只保留最常用和兼容性好的参数
-            `[v]subtitles='${escapedSubtitlePath}':force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+            `[v]subtitles='${escapedSubtitlePath}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -5551,7 +5551,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
