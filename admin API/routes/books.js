@@ -902,36 +902,52 @@ router.post('/:bookId/extract', async (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   
-  // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
-  res.header('Content-Type', 'text/event-stream');
-  res.header('Cache-Control', 'no-cache');
-  res.header('Connection', 'keep-alive');
-  res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+  // 检测前端是否支持SSE（通过Accept头或useSSE参数）
+  const acceptHeader = req.headers.accept || '';
+  const useSSE = req.query.useSSE === 'true' || req.body.useSSE === true || acceptHeader.includes('text/event-stream');
   
-  // 发送进度更新的辅助函数
-  const sendProgress = (message, progress = null) => {
-    try {
-      const data = JSON.stringify({ message, progress, timestamp: Date.now() });
-      res.write(`data: ${data}\n\n`);
+  let sendProgress, cleanup, heartbeatInterval;
+  
+  if (useSSE) {
+    // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
+    res.header('Content-Type', 'text/event-stream');
+    res.header('Cache-Control', 'no-cache');
+    res.header('Connection', 'keep-alive');
+    res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+    
+    // 发送进度更新的辅助函数
+    sendProgress = (message, progress = null) => {
+      try {
+        const data = JSON.stringify({ message, progress, timestamp: Date.now() });
+        res.write(`data: ${data}\n\n`);
+        console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
+      } catch (err) {
+        console.error('❌ 发送进度更新失败:', err);
+      }
+    };
+    
+    // 发送心跳以保持连接活跃（每30秒发送一次）
+    heartbeatInterval = setInterval(() => {
+      try {
+        res.write(`: heartbeat\n\n`);
+      } catch (err) {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+    
+    // 清理函数
+    cleanup = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    };
+  } else {
+    // 兼容模式：使用JSON响应，但仍然发送进度更新（通过日志）
+    res.header('Content-Type', 'application/json');
+    sendProgress = (message, progress = null) => {
       console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
-    } catch (err) {
-      console.error('❌ 发送进度更新失败:', err);
-    }
-  };
-  
-  // 发送心跳以保持连接活跃（每30秒发送一次）
-  const heartbeatInterval = setInterval(() => {
-    try {
-      res.write(`: heartbeat\n\n`);
-    } catch (err) {
-      clearInterval(heartbeatInterval);
-    }
-  }, 30000);
-  
-  // 清理函数
-  const cleanup = () => {
-    clearInterval(heartbeatInterval);
-  };
+    };
+    cleanup = () => {};
+    console.log('⚠️ 前端不支持SSE，使用JSON响应模式（兼容模式）');
+  }
   
   try {
     const { bookId } = req.params;
@@ -939,9 +955,13 @@ router.post('/:bookId/extract', async (req, res) => {
 
     if (![5, 10, 20, 30].includes(segments)) {
       cleanup();
-      const errorData = JSON.stringify({ success: false, message: '分段数量必须是5、10、20或30', completed: true });
-      res.write(`data: ${errorData}\n\n`);
-      res.end();
+      if (useSSE) {
+        const errorData = JSON.stringify({ success: false, message: '分段数量必须是5、10、20或30', completed: true });
+        res.write(`data: ${errorData}\n\n`);
+        res.end();
+      } else {
+        res.status(400).json({ success: false, message: '分段数量必须是5、10、20或30' });
+      }
       return;
     }
     
@@ -1323,7 +1343,7 @@ Return in JSON format:
     book.set('status', '已完成');
     await book.save();
 
-    // 发送完成消息（SSE格式）
+    // 发送完成消息
     cleanup();
     sendProgress('书籍提取完成', 100);
     const responseData = {
@@ -1331,12 +1351,19 @@ Return in JSON format:
       data: {
         bookId: book.id,
         segments: savedSegments
-      },
-      completed: true
+      }
     };
-    const finalData = JSON.stringify(responseData);
-    res.write(`data: ${finalData}\n\n`);
-    res.end();
+    
+    if (useSSE) {
+      // SSE格式响应
+      responseData.completed = true;
+      const finalData = JSON.stringify(responseData);
+      res.write(`data: ${finalData}\n\n`);
+      res.end();
+    } else {
+      // JSON格式响应（兼容模式）
+      res.json(responseData);
+    }
   } catch (error) {
     cleanup();
     console.error('❌ 拆解书籍失败:', error);
@@ -1371,23 +1398,29 @@ Return in JSON format:
       errorSuggestion = 'AI返回的内容格式不正确，请重试';
     }
 
-    const errorResponse = {
-      success: false,
-      message: errorMessage,
-      error: error.message || String(error),
-      suggestion: errorSuggestion,
-      completed: true
-    };
-    
-    // 在开发环境下返回更多调试信息
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
-      errorResponse.stack = error.stack;
-      errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
-    }
-    
-    const errorData = JSON.stringify(errorResponse);
-    res.write(`data: ${errorData}\n\n`);
-    res.end();
+      const errorResponse = {
+        success: false,
+        message: errorMessage,
+        error: error.message || String(error),
+        suggestion: errorSuggestion
+      };
+      
+      // 在开发环境下返回更多调试信息
+      if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+        errorResponse.stack = error.stack;
+        errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
+      }
+      
+      if (useSSE) {
+        // SSE格式响应
+        errorResponse.completed = true;
+        const errorData = JSON.stringify(errorResponse);
+        res.write(`data: ${errorData}\n\n`);
+        res.end();
+      } else {
+        // JSON格式响应（兼容模式）
+        res.status(500).json(errorResponse);
+      }
   }
 });
 
@@ -3303,36 +3336,52 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   
-  // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
-  res.header('Content-Type', 'text/event-stream');
-  res.header('Cache-Control', 'no-cache');
-  res.header('Connection', 'keep-alive');
-  res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+  // 检测前端是否支持SSE（通过Accept头或useSSE参数）
+  const acceptHeader = req.headers.accept || '';
+  const useSSE = req.query.useSSE === 'true' || req.body.useSSE === true || acceptHeader.includes('text/event-stream');
   
-  // 发送进度更新的辅助函数
-  const sendProgress = (message, progress = null) => {
-    try {
-      const data = JSON.stringify({ message, progress, timestamp: Date.now() });
-      res.write(`data: ${data}\n\n`);
+  let sendProgress, cleanup, heartbeatInterval;
+  
+  if (useSSE) {
+    // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
+    res.header('Content-Type', 'text/event-stream');
+    res.header('Cache-Control', 'no-cache');
+    res.header('Connection', 'keep-alive');
+    res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+    
+    // 发送进度更新的辅助函数
+    sendProgress = (message, progress = null) => {
+      try {
+        const data = JSON.stringify({ message, progress, timestamp: Date.now() });
+        res.write(`data: ${data}\n\n`);
+        console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
+      } catch (err) {
+        console.error('❌ 发送进度更新失败:', err);
+      }
+    };
+    
+    // 发送心跳以保持连接活跃（每30秒发送一次）
+    heartbeatInterval = setInterval(() => {
+      try {
+        res.write(`: heartbeat\n\n`);
+      } catch (err) {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+    
+    // 清理函数
+    cleanup = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    };
+  } else {
+    // 兼容模式：使用JSON响应，但仍然发送进度更新（通过日志）
+    res.header('Content-Type', 'application/json');
+    sendProgress = (message, progress = null) => {
       console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
-    } catch (err) {
-      console.error('❌ 发送进度更新失败:', err);
-    }
-  };
-  
-  // 发送心跳以保持连接活跃（每30秒发送一次）
-  const heartbeatInterval = setInterval(() => {
-    try {
-      res.write(`: heartbeat\n\n`);
-    } catch (err) {
-      clearInterval(heartbeatInterval);
-    }
-  }, 30000);
-  
-  // 清理函数
-  const cleanup = () => {
-    clearInterval(heartbeatInterval);
-  };
+    };
+    cleanup = () => {};
+    console.log('⚠️ 前端不支持SSE，使用JSON响应模式（兼容模式）');
+  }
   
   let tempVideoPath = null;
   let tempAudioPath = null;
@@ -3866,12 +3915,22 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       responseData.videoUrl = finalVideoUrl;
     }
     
-    // 发送完成消息（SSE格式）
+    // 发送完成消息
     cleanup();
     sendProgress('视频生成完成', 100);
-    const finalData = JSON.stringify({ success: true, data: responseData, completed: true });
-    res.write(`data: ${finalData}\n\n`);
-    res.end();
+    
+    if (useSSE) {
+      // SSE格式响应
+      const finalData = JSON.stringify({ success: true, data: responseData, completed: true });
+      res.write(`data: ${finalData}\n\n`);
+      res.end();
+    } else {
+      // JSON格式响应（兼容模式）
+      res.json({
+        success: true,
+        data: responseData
+      });
+    }
   } catch (error) {
     cleanup();
     console.error('❌ 生成视频失败:', error);
@@ -3924,14 +3983,13 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
         errorSuggestion = '请检查FFmpeg是否正确安装，或重试';
       }
 
-      // 发送错误消息（SSE格式）
+      // 发送错误消息
       const errorResponse = {
         success: false,
         message: errorMessage,
         error: error.message || String(error),
         suggestion: errorSuggestion,
-        contentId: req.params.contentId,
-        completed: true
+        contentId: req.params.contentId
       };
       
       // 在开发环境下返回更多调试信息
@@ -3940,9 +3998,16 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
         errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
       }
       
-      const errorData = JSON.stringify(errorResponse);
-      res.write(`data: ${errorData}\n\n`);
-      res.end();
+      if (useSSE) {
+        // SSE格式响应
+        errorResponse.completed = true;
+        const errorData = JSON.stringify(errorResponse);
+        res.write(`data: ${errorData}\n\n`);
+        res.end();
+      } else {
+        // JSON格式响应（兼容模式）
+        res.status(500).json(errorResponse);
+      }
     } else {
       console.error('❌ 响应已发送，无法发送错误响应');
     }
@@ -4652,36 +4717,52 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   
-  // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
-  res.header('Content-Type', 'text/event-stream');
-  res.header('Cache-Control', 'no-cache');
-  res.header('Connection', 'keep-alive');
-  res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+  // 检测前端是否支持SSE（通过Accept头或useSSE参数）
+  const acceptHeader = req.headers.accept || '';
+  const useSSE = req.query.useSSE === 'true' || req.body.useSSE === true || acceptHeader.includes('text/event-stream');
   
-  // 发送进度更新的辅助函数
-  const sendProgress = (message, progress = null) => {
-    try {
-      const data = JSON.stringify({ message, progress, timestamp: Date.now() });
-      res.write(`data: ${data}\n\n`);
+  let sendProgress, cleanup, heartbeatInterval;
+  
+  if (useSSE) {
+    // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
+    res.header('Content-Type', 'text/event-stream');
+    res.header('Cache-Control', 'no-cache');
+    res.header('Connection', 'keep-alive');
+    res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+    
+    // 发送进度更新的辅助函数
+    sendProgress = (message, progress = null) => {
+      try {
+        const data = JSON.stringify({ message, progress, timestamp: Date.now() });
+        res.write(`data: ${data}\n\n`);
+        console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
+      } catch (err) {
+        console.error('❌ 发送进度更新失败:', err);
+      }
+    };
+    
+    // 发送心跳以保持连接活跃（每30秒发送一次）
+    heartbeatInterval = setInterval(() => {
+      try {
+        res.write(`: heartbeat\n\n`);
+      } catch (err) {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+    
+    // 清理函数
+    cleanup = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    };
+  } else {
+    // 兼容模式：使用JSON响应，但仍然发送进度更新（通过日志）
+    res.header('Content-Type', 'application/json');
+    sendProgress = (message, progress = null) => {
       console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
-    } catch (err) {
-      console.error('❌ 发送进度更新失败:', err);
-    }
-  };
-  
-  // 发送心跳以保持连接活跃（每30秒发送一次）
-  const heartbeatInterval = setInterval(() => {
-    try {
-      res.write(`: heartbeat\n\n`);
-    } catch (err) {
-      clearInterval(heartbeatInterval);
-    }
-  }, 30000);
-  
-  // 清理函数
-  const cleanup = () => {
-    clearInterval(heartbeatInterval);
-  };
+    };
+    cleanup = () => {};
+    console.log('⚠️ 前端不支持SSE，使用JSON响应模式（兼容模式）');
+  }
   
   let tempVideoPath = null;
   let tempAudioPath = null;
@@ -5557,7 +5638,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     console.log('✅ 英文视频生成完成');
     
-    // 发送完成消息（SSE格式）
+    // 发送完成消息
     cleanup();
     sendProgress('英文视频生成完成', 100);
     const responseData = {
@@ -5569,12 +5650,19 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         summaryEn: summaryEn,
         contentId: contentId,
         language: 'en'
-      },
-      completed: true
+      }
     };
-    const finalData = JSON.stringify(responseData);
-    res.write(`data: ${finalData}\n\n`);
-    res.end();
+    
+    if (useSSE) {
+      // SSE格式响应
+      responseData.completed = true;
+      const finalData = JSON.stringify(responseData);
+      res.write(`data: ${finalData}\n\n`);
+      res.end();
+    } else {
+      // JSON格式响应（兼容模式）
+      res.json(responseData);
+    }
     
   } catch (error) {
     cleanup();
@@ -5604,12 +5692,11 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         console.error('❌ 更新内容状态失败:', updateError);
       }
 
-      // 发送错误消息（SSE格式）
+      // 发送错误消息
       const errorResponse = {
         success: false,
         message: `生成英文视频失败: ${error.message}`,
-        error: error.message || String(error),
-        completed: true
+        error: error.message || String(error)
       };
       
       // 在开发环境下返回更多调试信息
@@ -5618,9 +5705,16 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
       }
       
-      const errorData = JSON.stringify(errorResponse);
-      res.write(`data: ${errorData}\n\n`);
-      res.end();
+      if (useSSE) {
+        // SSE格式响应
+        errorResponse.completed = true;
+        const errorData = JSON.stringify(errorResponse);
+        res.write(`data: ${errorData}\n\n`);
+        res.end();
+      } else {
+        // JSON格式响应（兼容模式）
+        res.status(500).json(errorResponse);
+      }
     } else {
       console.error('❌ 响应已发送，无法发送错误响应');
     }
