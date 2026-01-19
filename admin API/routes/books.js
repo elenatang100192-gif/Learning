@@ -1344,11 +1344,19 @@ Return in JSON format:
 
 // 使用腾讯云长语音合成将文字转换为语音
 router.post('/content/:contentId/generate-audio', async (req, res) => {
+  // 立即设置CORS头，确保长时间运行的请求也能正确返回CORS响应
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
   // 设置响应超时时间（15分钟），因为音频生成需要轮询查询任务状态
   req.setTimeout(15 * 60 * 1000);
   res.setTimeout(15 * 60 * 1000);
   
   console.log('🚀 ========== 生成音频API被调用 ==========');
+  console.log('🌐 Origin:', origin);
   console.log('📥 请求参数:', JSON.stringify(req.params, null, 2));
   console.log('📥 请求体:', JSON.stringify(req.body, null, 2));
   console.log('📥 Content-Type:', req.headers['content-type']);
@@ -1835,6 +1843,13 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
 
 // 步骤2: 生成无声视频（根据文本和音频时长调用doubao模型）
 router.post('/content/:contentId/generate-silent-video', async (req, res) => {
+  // 立即设置CORS头，确保长时间运行的请求也能正确返回CORS响应
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
   // 设置响应超时时间（15分钟）
   req.setTimeout(15 * 60 * 1000);
   res.setTimeout(15 * 60 * 1000);
@@ -1845,6 +1860,8 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
     requestAborted = true;
     console.warn('⚠️ 客户端断开连接，但后端将继续处理视频生成任务');
   });
+  
+  console.log('🌐 Origin:', origin);
   
   try {
     const { contentId } = req.params;
@@ -3188,6 +3205,13 @@ function cleanSubtitleText(text) {
 }
 
 router.post('/content/:contentId/generate-video', async (req, res) => {
+  // 立即设置CORS头，确保长时间运行的请求也能正确返回CORS响应
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
@@ -3197,6 +3221,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     console.log('🚀 ========== 生成视频API被调用 ==========');
     console.log('📥 请求参数:', JSON.stringify(req.params, null, 2));
     console.log('📥 请求体:', JSON.stringify(req.body, null, 2));
+    console.log('🌐 Origin:', origin);
     
     const { contentId } = req.params;
     const { audioUrl, language = 'zh' } = req.body;
@@ -3709,6 +3734,13 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     
     // 如果响应还没有发送，发送错误响应
     if (!res.headersSent) {
+      // 确保错误响应也包含CORS头
+      const origin = req.headers.origin;
+      if (origin) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
+      
       // 更新状态为失败
       try {
         const content = await new AV.Query('ExtractedContent').get(req.params.contentId);
@@ -4457,6 +4489,13 @@ router.post('/content/:contentId/translate', async (req, res) => {
 
 // 生成英文视频（一键生成：翻译+英文音频+合并视频）
 router.post('/content/:contentId/generate-english-video', async (req, res) => {
+  // 立即设置CORS头，确保长时间运行的请求也能正确返回CORS响应
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
@@ -4466,6 +4505,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     const { contentId } = req.params;
     
     console.log('🚀 ========== 生成英文视频API被调用 ==========');
+    console.log('🌐 Origin:', origin);
     console.log('📥 contentId:', contentId);
     
     // 获取内容对象

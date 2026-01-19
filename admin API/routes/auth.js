@@ -103,13 +103,16 @@ router.post('/send-otp', [
 
     // 生成6位随机OTP验证码
     const otp = generateOTP();
-    const expiresAt = Date.now() + (5 * 60 * 1000); // 5分钟后过期
+    const expiresAt = Date.now() + (10 * 60 * 1000); // 10分钟后过期（增加有效期，避免生产环境问题）
 
     // 存储OTP到缓存
     otpCache.set(email, { otp, expiresAt });
 
     console.log(`📧 发送OTP验证码到邮箱: ${email}`);
-    console.log(`🔢 生成的OTP: ${otp} (有效期5分钟)`);
+    console.log(`🔢 生成的OTP: ${otp} (有效期10分钟)`);
+    console.log(`📋 过期时间: ${new Date(expiresAt).toISOString()}`);
+    console.log(`📋 当前缓存大小: ${otpCache.size}`);
+    console.log(`🌍 环境: NODE_ENV=${process.env.NODE_ENV || '未设置'}`);
 
     // 开发模式：显示OTP并返回给前端
     if (process.env.NODE_ENV !== 'production') {
@@ -197,18 +200,29 @@ router.post('/login', [
 
     const { email, otp } = req.body;
 
+    console.log(`🔐 登录请求: email=${email}, otp=${otp}`);
+    console.log(`📋 当前OTP缓存大小: ${otpCache.size}`);
+    console.log(`📋 缓存中的邮箱:`, Array.from(otpCache.keys()));
+
     // 验证OTP
     const cachedOTP = otpCache.get(email);
 
     if (!cachedOTP) {
+      console.warn(`⚠️ OTP未找到: email=${email}`);
+      console.warn(`📋 可能的原因: 1) OTP已过期 2) 服务器重启导致内存缓存丢失 3) 使用了不同的服务器实例`);
       return res.status(401).json({
         success: false,
-        message: 'OTP not found or expired. Please request a new one.'
+        message: 'OTP not found or expired. Please request a new one.',
+        hint: '生产环境：如果服务器重启，OTP缓存会丢失。请重新请求验证码。'
       });
     }
 
+    console.log(`✅ 找到缓存的OTP: email=${email}, expiresAt=${new Date(cachedOTP.expiresAt).toISOString()}`);
+
     // 检查OTP是否过期
-    if (Date.now() > cachedOTP.expiresAt) {
+    const now = Date.now();
+    if (now > cachedOTP.expiresAt) {
+      console.warn(`⚠️ OTP已过期: email=${email}, expiresAt=${new Date(cachedOTP.expiresAt).toISOString()}, now=${new Date(now).toISOString()}`);
       otpCache.delete(email);
       return res.status(401).json({
         success: false,
@@ -217,10 +231,12 @@ router.post('/login', [
     }
 
     // 验证OTP是否正确
+    console.log(`🔍 验证OTP: 输入=${otp}, 缓存=${cachedOTP.otp}, 匹配=${cachedOTP.otp === otp}`);
     if (cachedOTP.otp !== otp) {
+      console.warn(`⚠️ OTP不匹配: email=${email}, 输入=${otp}, 期望=${cachedOTP.otp}`);
       return res.status(401).json({
         success: false,
-        message: 'Invalid OTP code'
+        message: 'Invalid OTP code. Please check your code and try again.'
       });
     }
 

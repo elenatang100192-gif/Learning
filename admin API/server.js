@@ -120,9 +120,28 @@ app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
 // 设置全局超时时间为5分钟（300秒）
+// 对于长时间运行的请求（如视频生成），设置更长的超时时间
 app.use((req, res, next) => {
-  req.setTimeout(5 * 60 * 1000); // 5分钟
-  res.setTimeout(5 * 60 * 1000); // 5分钟
+  // 检查是否是长时间运行的请求
+  const isLongRunningRequest = 
+    req.path.includes('generate-video') ||
+    req.path.includes('generate-silent-video') ||
+    req.path.includes('generate-english-video') ||
+    req.path.includes('generate-audio') ||
+    req.path.includes('/extract');
+  
+  const timeout = isLongRunningRequest ? 15 * 60 * 1000 : 5 * 60 * 1000; // 长时间请求15分钟，其他5分钟
+  
+  req.setTimeout(timeout);
+  res.setTimeout(timeout);
+  
+  // 确保在超时前设置CORS头
+  const origin = req.headers.origin;
+  if (origin && !res.headersSent) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
   next();
 });
 
