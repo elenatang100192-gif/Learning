@@ -147,6 +147,7 @@ export interface Book {
   isbn: string;
   category: Category;
   coverUrl?: string;
+  blogCoverUrl?: string;
   fileUrl?: string;
   uploadDate: string;
   status: '待处理' | '提取中' | '已完成';
@@ -299,6 +300,7 @@ export const bookAPI = {
         sortOrder: item.get('category').get('sortOrder')
       } : undefined,
       coverUrl: item.get('coverUrl'),
+      blogCoverUrl: item.get('blogCoverUrl'),
       fileUrl: item.get('fileUrl'),
       uploadDate: item.get('uploadDate'),
       status: item.get('status'),
@@ -528,6 +530,33 @@ export const bookAPI = {
   },
 
   // 生成无声视频（步骤2）
+  // 生成博客封面图提示词（3种风格）
+  async generateBlogCoverPrompts(bookId: string) {
+    try {
+      const response = await apiRequest(`/books/${bookId}/generate-blog-cover-prompts`, {
+        method: 'POST',
+      });
+      return response.success ? response.data : null;
+    } catch (error) {
+      console.error('生成博客封面图提示词失败:', error);
+      throw error;
+    }
+  },
+
+  // 生成博客封面图
+  async generateBlogCover(bookId: string, customPrompt?: string) {
+    try {
+      const response = await apiRequest(`/books/${bookId}/generate-blog-cover`, {
+        method: 'POST',
+        body: JSON.stringify({ customPrompt }),
+      });
+      return response.success ? response.data : null;
+    } catch (error) {
+      console.error('生成博客封面图失败:', error);
+      throw error;
+    }
+  },
+
   async generateSilentVideo(contentId: string, styleDescription?: string) {
     try {
       console.log(`📞 调用生成无声视频API: contentId=${contentId}, styleDescription=${styleDescription}`);

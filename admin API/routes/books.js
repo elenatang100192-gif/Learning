@@ -17,7 +17,7 @@ const pdfParse = require('pdf-parse');
 const { EPub } = require('epub2');
 // OCR功能暂时禁用，等待修复pdfjs-dist导入问题
 // const { createWorker } = require('tesseract.js');
-// const { createCanvas } = require('canvas');
+const { createCanvas, loadImage } = require('canvas');
 
 // 配置multer用于文件上传
 const upload = multer({ 
@@ -26,7 +26,7 @@ const upload = multer({
 });
 
 // API配置（从环境变量读取）
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'sk-c3a8c2ddc6dc49c4b6f43b3394147ead';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'sk-0abbe78f54d84a7f8a91c1e36bce0a97';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 // 阿里云百炼（DashScope）API配置
@@ -56,6 +56,12 @@ const DOUBAO_MODEL_ID = process.env.DOUBAO_MODEL_ID || 'doubao-seedance-1-5-pro-
 // volcengine API端点（视频生成）
 const DOUBAO_TEXT_TO_VIDEO_URL = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 const DOUBAO_TASK_STATUS_URL = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
+
+// Doubao-Seedream-4-0 API配置（图片生成）
+// 模型ID：doubao-seedream-4-0-250828
+// API端点：https://ark.cn-beijing.volces.com/api/v3/images/generations
+const DOUBAO_IMAGE_GEN_URL = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
+const DOUBAO_IMAGE_MODEL_ID = process.env.DOUBAO_IMAGE_MODEL_ID || 'doubao-seedream-4-0-250828';
 
 // 注意：已完全移除豆包TTS相关代码，只使用腾讯云TTS
 // 以下变量定义保留仅用于兼容性，但不会被使用
@@ -410,6 +416,21 @@ const tencentTtsClient = new TtsClient({
   },
 });
 
+// 初始化腾讯云ASR（语音识别）客户端
+const AsrClient = tencentcloud.asr.v20190614.Client;
+const tencentAsrClient = new AsrClient({
+  credential: {
+    secretId: TENCENT_SECRET_ID,
+    secretKey: TENCENT_SECRET_KEY,
+  },
+  region: 'ap-shanghai', // ASR服务区域
+  profile: {
+    httpProfile: {
+      endpoint: 'asr.tencentcloudapi.com',
+    },
+  },
+});
+
 // 上传电子书文件
 router.post('/upload', upload.single('bookFile'), async (req, res) => {
   // 设置上传请求超时时间为5分钟
@@ -559,6 +580,318 @@ router.post('/upload', upload.single('bookFile'), async (req, res) => {
   }
 });
 
+// 生成博客封面图（使用doubao-seedream-4-0模型）- 必须在 /:bookId/extract 之前定义
+// 生成博客封面图提示词（使用Deepseek生成3种风格）
+router.post('/:bookId/generate-blog-cover-prompts', async (req, res) => {
+  try {
+    const { bookId } = req.params;
+    
+    // 获取书籍信息
+    const book = await new AV.Query('Book').get(bookId);
+    if (!book) {
+      return res.status(404).json({
+        success: false,
+        message: '书籍不存在'
+      });
+    }
+    
+    const title = book.get('title');
+    const author = book.get('author');
+    const titleEn = book.get('titleEn') || '';
+    const authorEn = book.get('authorEn') || '';
+    
+    if (!title || !author) {
+      return res.status(400).json({
+        success: false,
+        message: '书籍标题或作者信息缺失'
+      });
+    }
+    
+    // 构建书名和作者文本
+    let titleText = title;
+    let authorText = author;
+    
+    if (titleEn && titleEn.trim()) {
+      titleText = `${title} / ${titleEn}`;
+    }
+    if (authorEn && authorEn.trim()) {
+      authorText = `${author} / ${authorEn}`;
+    }
+    
+    console.log('🎨 开始生成博客封面图提示词，书名:', titleText, '作者:', authorText);
+    
+    // 使用Deepseek生成3种风格的提示词
+    const deepseekPrompt = `请根据以下书籍信息，生成3种不同风格的博客封面图提示词。
+
+书籍信息：
+- 书名：${titleText}
+- 作者：${authorText}
+
+要求：
+1. 必须生成恰好3个提示词，分别对应以下3种风格：
+   - 风格1：现代简洁风格 - 注重高级感和专业性，适合多数知识类博客
+   - 风格2：创意表达风格 - 更具动感和创意，突出"分享"和"传播"的概念
+   - 风格3：知识舞台风格 - 将书籍置于"舞台"中央，营造出庄重、经典的讲座或发布会氛围
+
+2. 每个提示词必须满足以下要求：
+   - 结合书籍实物和话筒元素
+   - 直接点明"书籍讲解"的主题
+   - 图片中只出现书籍名称"${titleText}"和作者名称"${authorText}"的中英文文案
+   - 不出现其他任何文字（如"书籍讲解"、"Book Review"等描述性文字）
+   - 9:16竖屏比例
+   - 高质量、专业设计
+
+3. 提示词应该用英文编写，适合用于AI图片生成
+
+请以JSON格式返回，格式如下：
+{
+  "style1": "提示词1（现代简洁风格）",
+  "style2": "提示词2（创意表达风格）",
+  "style3": "提示词3（知识舞台风格）"
+}`;
+
+    const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'user',
+            content: deepseekPrompt
+          }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    if (!deepseekResponse.ok) {
+      const errorText = await deepseekResponse.text();
+      console.error('❌ Deepseek API返回错误:', deepseekResponse.status, errorText);
+      throw new Error(`Deepseek API错误: ${deepseekResponse.status} - ${errorText}`);
+    }
+
+    const deepseekData = await deepseekResponse.json();
+    const deepseekContent = deepseekData.choices[0]?.message?.content || '';
+    console.log('📥 Deepseek API原始响应:', deepseekContent);
+
+    // 解析JSON响应
+    let prompts = null;
+    try {
+      const jsonMatch = deepseekContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        prompts = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseError) {
+      console.error('❌ 解析Deepseek响应失败:', parseError);
+    }
+
+    // 如果解析失败，生成默认提示词
+    if (!prompts || !prompts.style1 || !prompts.style2 || !prompts.style3) {
+      console.warn('⚠️ Deepseek返回的提示词格式不正确，使用默认提示词');
+      const basePrompt = `A book cover design, 9:16 vertical ratio, high quality, professional design. The cover combines a physical book and a microphone element, directly indicating the theme of "book explanation". The cover must ONLY display the book title "${titleText}" and author name "${authorText}". Absolutely no other Chinese or English text, no descriptions, no subtitles, no additional information should appear on the cover.`;
+      
+      prompts = {
+        style1: `${basePrompt} Modern minimalist style, elegant design, clean layout, professional and sophisticated, suitable for knowledge blogs.`,
+        style2: `${basePrompt} Creative expression style, dynamic and creative, highlighting the concept of "sharing" and "spreading", vibrant colors, engaging composition.`,
+        style3: `${basePrompt} Knowledge stage style, the book is placed in the center of a "stage", creating a solemn and classic lecture or press conference atmosphere, dramatic lighting, formal setting.`
+      };
+    }
+
+    console.log('✅ 成功生成3种风格的提示词');
+    console.log('   风格1（现代简洁）:', prompts.style1);
+    console.log('   风格2（创意表达）:', prompts.style2);
+    console.log('   风格3（知识舞台）:', prompts.style3);
+
+    res.json({
+      success: true,
+      data: {
+        prompts: prompts,
+        bookTitle: titleText,
+        bookAuthor: authorText
+      }
+    });
+
+  } catch (error) {
+    console.error('生成博客封面图提示词失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '生成博客封面图提示词失败',
+      error: error.message || String(error)
+    });
+  }
+});
+
+router.post('/:bookId/generate-blog-cover', async (req, res) => {
+  try {
+    const { bookId } = req.params;
+    const { customPrompt } = req.body; // 支持自定义提示词
+    
+    // 获取书籍信息
+    const book = await new AV.Query('Book').get(bookId);
+    if (!book) {
+      return res.status(404).json({
+        success: false,
+        message: '书籍不存在'
+      });
+    }
+    
+    const title = book.get('title');
+    const author = book.get('author');
+    const titleEn = book.get('titleEn') || '';
+    const authorEn = book.get('authorEn') || '';
+    
+    if (!title || !author) {
+      return res.status(400).json({
+        success: false,
+        message: '书籍标题或作者信息缺失'
+      });
+    }
+    
+    console.log('🎨 开始生成博客封面图，书名:', title, '作者:', author);
+    if (titleEn) console.log('   英文书名:', titleEn);
+    if (authorEn) console.log('   英文作者:', authorEn);
+    
+    // 构建提示词：只显示书名和作者名称，不显示其他任何文字
+    // 如果有英文版本，同时显示中英文
+    let titleText = title;
+    let authorText = author;
+    
+    if (titleEn && titleEn.trim()) {
+      titleText = `${title} / ${titleEn}`;
+    }
+    if (authorEn && authorEn.trim()) {
+      authorText = `${author} / ${authorEn}`;
+    }
+    
+    // 如果提供了自定义提示词，使用自定义提示词；否则使用默认提示词
+    let prompt;
+    if (customPrompt && customPrompt.trim()) {
+      prompt = customPrompt;
+      console.log('📝 使用自定义提示词:', prompt);
+    } else {
+      // 使用中英文混合提示词，明确要求只显示书名和作者，不显示其他文字
+      prompt = `A book cover design, 9:16 vertical ratio, high quality, professional design. The cover must ONLY display the book title "${titleText}" and author name "${authorText}". Absolutely no other Chinese or English text, no descriptions, no subtitles, no additional information should appear on the cover. Book style, elegant design, clean layout, minimalist style, only title and author name visible`;
+      console.log('📝 使用默认提示词:', prompt);
+    }
+    
+    // 调用Doubao图片生成API（增加超时时间到60秒）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+    
+    let imageGenResponse;
+    try {
+      imageGenResponse = await fetch(DOUBAO_IMAGE_GEN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DOUBAO_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: DOUBAO_IMAGE_MODEL_ID,
+          prompt: prompt,
+          sequential_image_generation: 'disabled',
+          response_format: 'url',
+          size: '2K', // 2K分辨率
+          stream: false,
+          watermark: true
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.error('❌ Doubao图片生成API请求超时（60秒）');
+        throw new Error('图片生成请求超时，请稍后重试');
+      }
+      if (error.cause && error.cause.code === 'UND_ERR_CONNECT_TIMEOUT') {
+        console.error('❌ Doubao图片生成API连接超时:', error.message);
+        throw new Error('无法连接到图片生成服务，请检查网络连接或稍后重试');
+      }
+      console.error('❌ Doubao图片生成API请求失败:', error.message);
+      throw error;
+    }
+    
+    if (!imageGenResponse.ok) {
+      const errorText = await imageGenResponse.text();
+      console.error('❌ Doubao图片生成API失败:', imageGenResponse.status, errorText);
+      throw new Error(`Doubao图片生成API失败: ${imageGenResponse.status} ${imageGenResponse.statusText} - ${errorText}`);
+    }
+    
+    const imageGenData = await imageGenResponse.json();
+    console.log('✅ Doubao图片生成API响应:', JSON.stringify(imageGenData, null, 2));
+    
+    // 检查响应格式
+    if (!imageGenData.data || !Array.isArray(imageGenData.data) || imageGenData.data.length === 0) {
+      console.error('❌ Doubao图片生成响应格式错误:', JSON.stringify(imageGenData, null, 2));
+      throw new Error('Doubao图片生成响应格式错误，未找到图片URL');
+    }
+    
+    const imageUrl = imageGenData.data[0].url;
+    if (!imageUrl) {
+      console.error('❌ Doubao图片生成响应格式错误，未找到URL字段:', JSON.stringify(imageGenData, null, 2));
+      throw new Error('Doubao图片生成响应格式错误，未找到图片URL');
+    }
+    
+    console.log('✅ 图片生成成功，URL:', imageUrl);
+    
+    // 下载图片并上传到LeanCloud（增加超时时间到30秒）
+    const downloadController = new AbortController();
+    const downloadTimeoutId = setTimeout(() => downloadController.abort(), 30000); // 30秒超时
+    
+    let imageResponse;
+    try {
+      imageResponse = await fetch(imageUrl, {
+        signal: downloadController.signal
+      });
+      clearTimeout(downloadTimeoutId);
+    } catch (error) {
+      clearTimeout(downloadTimeoutId);
+      if (error.name === 'AbortError') {
+        console.error('❌ 下载图片超时（30秒）');
+        throw new Error('下载生成的图片超时，请稍后重试');
+      }
+      console.error('❌ 下载图片失败:', error.message);
+      throw new Error(`下载生成的图片失败: ${error.message}`);
+    }
+    
+    if (!imageResponse.ok) {
+      throw new Error(`下载生成的图片失败: ${imageResponse.statusText}`);
+    }
+    
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+    const imageFile = new AV.File(`blog_cover_${bookId}_${Date.now()}.jpg`, imageBuffer, 'image/jpeg');
+    const uploadedFile = await imageFile.save();
+    
+    const finalImageUrl = uploadedFile.url();
+    console.log('✅ 图片上传到LeanCloud成功，URL:', finalImageUrl);
+    
+    // 保存到书籍对象
+    book.set('blogCoverUrl', finalImageUrl);
+    await book.save();
+    
+    res.json({
+      success: true,
+      data: {
+        blogCoverUrl: finalImageUrl,
+        imageUrl: finalImageUrl
+      }
+    });
+    
+  } catch (error) {
+    console.error('生成博客封面图失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '生成博客封面图失败',
+      error: error.message || String(error)
+    });
+  }
+});
+
 // 使用Deepseek拆解书籍内容
 router.post('/:bookId/extract', async (req, res) => {
   try {
@@ -611,31 +944,53 @@ router.post('/:bookId/extract', async (req, res) => {
     }
 
     // 调用Deepseek API拆解书籍（基于文件内容）
-    const prompt = `Please break down the following book content into ${segments} segments of ESSENTIAL CORE IDEAS. Each segment MUST include BOTH Chinese and English versions:
+    // 获取解读主线角度（如果有的话，否则使用默认值）
+    const mainTheme = req.body.mainTheme || `探讨其理论在AI时代的演变与对个人成长的启示`;
+    
+    const prompt = `请扮演一位资深书籍作者、商业分析师及播客主理人，你擅长将经典理论置于当下语境中进行深度解构与重建。现在，你要为一本重要的书籍创作一个具有持久影响力的深度解读系列。
 
-Book Title: ${book.get('title')}
-Book Content:
+一、核心指令：
+1. 目标书籍：《${book.get('title')}》
+2. 系列构成：${segments}集系列解读文稿
+3. 核心要求：每集内容需达到 1000字左右的实质性分析，提供远超书籍摘要的增值洞察并且整个系列需围绕一个核心命题展开：${mainTheme}。
+
+二：分集详细创作（请对每一集进行充分展开）
+对于每一集，请按以下框架撰写：
+
+Episode [序号]：[一个具有吸引力和概括性的标题]
+
+1. 核心命题（一句话）：明确本集要解决和阐述的核心问题/观点。
+
+2. 开头段落（约150-200字）：以一个强烈的"认知钩子"（如一个颠覆性问题、一个普遍误区、一个震撼的书中金句）开篇。简要承接上文（如果是第二集及以后），并点明本集内容的独特价值和重要性。语言需具有对话感和引导性。
+
+3. 主体内容（约800-850字，必须达到深度分析要求）：这是核心部分，需详细展开，确保内容充实。必须包含：
+* 核心概念深度阐释：对书中关键概念进行剥茧抽丝式的解读，阐明其真正含义及常见误解。
+* 延伸分析与时代结合：结合本书出版后的商业案例、当前行业趋势或普遍面临的问题，论证这些概念的当下适用性。这是体现你分析深度的关键。
+* 对听众/读者的直接启示：将宏观理论落到微观行动，给出具体的思考方向、自检问题或行动步骤建议。
+
+4. 本集小结与下集预告（约50字）：
+* 用一两句话凝练本集核心收获。
+* 自然地引出下一集的主题，设置悬念。
+
+三、整体风格与格式规范：
+语言：精准、清晰、富有逻辑力量，同时具备向听众娓娓道来的对话感。避免空洞的形容词堆砌。
+立场：作为真诚的"解读桥梁"与"思考催化剂"，而非居高临下的布道者。
+
+书籍内容：
 ${bookContent}
 
-CRITICAL REQUIREMENTS:
-1. Extract ONLY the CORE IDEAS and ESSENCE of the book, NOT general summaries
-2. Each segment should focus on SPECIFIC, ACTIONABLE insights and key concepts
-3. Avoid vague, general statements like "本书认为", "作者指出", "本书提出的核心问题是"
-4. Extract CONCRETE ideas, principles, methods, or insights that are valuable and actionable
-5. Each segment should be PRECISE and DETAILED, focusing on the essence
+请将以上内容拆解为${segments}集深度解读文稿。每集需要包含：
 
-Please break down this content into ${segments} segments. Each segment MUST include BOTH Chinese and English versions:
-
-1. chapterTitle (Chinese) - 章节标题（中文），反映该段的核心主题
-2. chapterTitleEn (English) - Chapter Title (English) - REQUIRED
-3. summary (Chinese, EXACTLY 200 characters, NO MORE, NO LESS. Extract ONLY the core essence and key ideas. Be SPECIFIC and CONCRETE. Avoid general statements. Focus on actionable insights, principles, methods, or valuable concepts. Do NOT use phrases like "本书认为", "作者指出", "本书提出的核心问题是", "本书介绍了", "本书阐述了". Instead, directly state the core ideas and insights) - 内容总结（中文，严格200字，只提取核心思想和精华内容，要具体、有价值，避免概括性表述）
-4. summaryEn (English, complete translation maintaining all details from Chinese summary, approximately 200-300 words) - Summary (English) - REQUIRED
+1. chapterTitle (Chinese) - 本集标题（中文），具有吸引力和概括性
+2. chapterTitleEn (English) - Episode Title (English) - REQUIRED
+3. summary (Chinese, 约200字) - 本集的核心内容总结，包含核心命题、主要观点和关键启示。要具体、有价值，避免概括性表述。直接阐述核心思想和洞察，不要使用"本书认为"、"作者指出"等表述。
+4. summaryEn (English, 约200-300字) - Summary (English) - 完整翻译中文summary，保持所有细节 - REQUIRED
 5. avatarDescription (description of gender, age, profession, style) - 数字人形象描述
 6. estimatedDuration (seconds) - 预计视频时长（秒）
 
 IMPORTANT: 
 - You MUST provide English translations (chapterTitleEn, summaryEn) for ALL segments. Do not skip any English fields.
-- The Chinese summary MUST be EXACTLY 200 characters. Count carefully and ensure precision.
+- The summary should reflect the depth and analytical rigor described in the framework above.
 - Extract ESSENCE and CORE IDEAS, NOT general summaries or overviews.
 - Be SPECIFIC and CONCRETE. Avoid vague statements.
 - Focus on ACTIONABLE insights, principles, methods, or valuable concepts.
@@ -644,10 +999,10 @@ Return in JSON format:
 {
   "segments": [
     {
-      "chapterTitle": "章节标题（反映核心主题）",
-      "chapterTitleEn": "Chapter Title",
-      "summary": "核心思想和精华内容（严格200字，具体、有价值，避免概括性表述）",
-      "summaryEn": "Summary (complete English translation, maintaining all details from Chinese summary)",
+      "chapterTitle": "Episode标题（具有吸引力和概括性）",
+      "chapterTitleEn": "Episode Title",
+      "summary": "核心内容总结（约200字，包含核心命题、主要观点和关键启示，具体、有价值）",
+      "summaryEn": "Summary (complete English translation, maintaining all details from Chinese summary, approximately 200-300 words)",
       "avatarDescription": "形象描述",
       "estimatedDuration": 180
     }
@@ -765,28 +1120,8 @@ Return in JSON format:
       
       summary = summary.trim();
       
-      // 确保summary严格控制在200字以内
-      if (summary.length > 200) {
-        // 如果超过200字，在句号、逗号或空格处截断，保持完整性
-        let truncated = summary.substring(0, 200);
-        const lastPeriod = truncated.lastIndexOf('。');
-        const lastComma = truncated.lastIndexOf('，');
-        const lastSemicolon = truncated.lastIndexOf('；');
-        const lastSpace = truncated.lastIndexOf(' ');
-        const cutPoint = Math.max(lastPeriod, lastComma, lastSemicolon, lastSpace);
-        
-        // 如果找到合适的截断点（在150字之后），则在该处截断
-        if (cutPoint > 150) {
-          truncated = truncated.substring(0, cutPoint + 1);
-        } else {
-          // 否则直接截断到200字
-          truncated = truncated.substring(0, 200);
-        }
-        summary = truncated.trim();
-      }
-      
-      // 如果少于200字但接近，可以适当补充（但保持核心思想）
-      // 这里不做自动补充，保持AI生成的原样
+      // 不再强制限制summary长度，允许显示完整内容
+      // 根据新的prompt要求，summary是"约200字"，可以更长以包含完整信息
       
       // 处理summaryEn（英文），将关键要点合并到摘要中
       let summaryEn = segment.summaryEn || '';
@@ -1022,10 +1357,14 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     const { contentId } = req.params;
     const { text, language = 'zh' } = req.body; // language: 'zh' 或 'en'
     
+    // 根据language参数判断是否是英文
+    const isEnglish = language === 'en';
+    
     console.log('📋 解析后的参数:');
     console.log('   contentId:', contentId);
     console.log('   text:', text ? `${text.substring(0, 50)}...` : 'undefined');
     console.log('   language:', language, `(type: ${typeof language})`);
+    console.log('   isEnglish:', isEnglish);
 
     if (!text) {
       console.log('❌ 缺少文本内容');
@@ -1044,15 +1383,74 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       });
     }
 
-    // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
-    // 中文和英文都使用腾讯云TTS的CreateTtsTask API，ModelType: 1（精品模型-大模型音色）
-    console.log(`🔍 检测语言参数: language="${language}", type=${typeof language}`);
-    console.log(`🔍 language === 'en': ${language === 'en'}`);
-    console.log(`🔍 language.toLowerCase() === 'en': ${String(language).toLowerCase() === 'en'}`);
+    // 获取书籍信息和集数信息，用于生成开场白
+    const book = contentObj.get('book');
+    const bookTitle = book ? (await book.fetch()).get('title') : '';
+    const segmentIndex = contentObj.get('segmentIndex') || 0;
     
-    // 使用更宽松的匹配，支持 'en', 'EN', 'En' 等
-    const isEnglish = String(language).toLowerCase() === 'en';
-    console.log(`🔍 isEnglish: ${isEnglish}`);
+    // 查询同一本书的所有内容段，获取总集数
+    let totalSegments = 0;
+    if (book) {
+      const allSegments = await new AV.Query('ExtractedContent')
+        .equalTo('book', book)
+        .ascending('segmentIndex')
+        .find();
+      totalSegments = allSegments.length;
+    }
+    
+    // 根据集数生成开场白
+    let openingText = '';
+    if (isEnglish) {
+      // 英文开场白
+      if (segmentIndex === 1 || totalSegments === 0) {
+        // 第一集
+        openingText = bookTitle 
+          ? `Hello, welcome to our book blog. Today we're starting with a book called "${bookTitle}". `
+          : `Hello, welcome to our book blog. Today we're starting with a new book. `;
+      } else if (segmentIndex === totalSegments && totalSegments > 0) {
+        // 最后一集
+        openingText = bookTitle
+          ? `Hello, this is the final episode of the "${bookTitle}" breakdown series. `
+          : `Hello, this is the final episode of our book breakdown series. `;
+      } else {
+        // 中间集 - 随机选择一种开场白
+        const middleOpenings = [
+          `Welcome back. In the previous episode, we discussed `,
+          `Hello, this is the book blog. `,
+          `Welcome back to our book blog. `
+        ];
+        openingText = middleOpenings[segmentIndex % middleOpenings.length];
+      }
+    } else {
+      // 中文开场白
+      if (segmentIndex === 1 || totalSegments === 0) {
+        // 第一集
+        openingText = bookTitle 
+          ? `你好，欢迎来到我们的书籍博客。今天我们要开启的，是一本名为《${bookTitle}》的书籍。`
+          : `你好，欢迎来到我们的书籍博客。今天我们要开启的，是一本重要的书籍。`;
+      } else if (segmentIndex === totalSegments && totalSegments > 0) {
+        // 最后一集
+        openingText = bookTitle
+          ? `你好，这是《${bookTitle}》拆解系列的最后一集。`
+          : `你好，这是本书拆解系列的最后一集。`;
+      } else {
+        // 中间集 - 随机选择一种开场白
+        const middleOpenings = [
+          `欢迎回来。上一集我们探讨了`,
+          `你好，这里是书籍博客。`,
+          `欢迎再次收听。`
+        ];
+        openingText = middleOpenings[segmentIndex % middleOpenings.length];
+      }
+    }
+    
+    // 在文本前添加开场白
+    const finalText = openingText ? `${openingText}${text}` : text;
+    console.log(`📝 添加开场白，集数: ${segmentIndex}/${totalSegments}, 语言: ${language}`);
+    console.log(`📝 开场白: ${openingText}`);
+    console.log(`📝 最终文本长度: ${finalText.length} 字符`);
+
+    // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
     
     // 统一使用腾讯云TTS长文本语音合成（精品模型-大模型音色）
     // 不再区分语言，都使用CreateTtsTask API
@@ -1064,14 +1462,14 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
     console.log('🔵 语言:', language);
 
     // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
-    console.log('🎵 调用腾讯云长文本语音合成API（精品模型-大模型音色），文本长度:', text.length, '语言:', language);
+    console.log('🎵 调用腾讯云长文本语音合成API（精品模型-大模型音色），文本长度:', finalText.length, '语言:', language);
     
     // 根据语言选择音色类型
     // 中文音色：601001（长文本语音合成专用音色）
     // 英文音色：501008（长文本语音合成专用音色）
     const voiceType = isEnglish ? 501008 : 601001; // 英文使用501008，中文使用601001（长文本语音合成专用音色）
     console.log(`🎤 选择音色类型: ${voiceType} (${isEnglish ? '英文-长文本语音合成专用音色' : '中文-长文本语音合成专用音色'})`);
-    console.log(`📝 生成${isEnglish ? '英文' : '中文'}音频，文本长度: ${text.length}，内容预览: ${text.substring(0, 100)}...`);
+    console.log(`📝 生成${isEnglish ? '英文' : '中文'}音频，文本长度: ${finalText.length}，内容预览: ${finalText.substring(0, 100)}...`);
     
     // 统一使用长文本API（CreateTtsTask），使用精品模型（大模型音色）
     let responseData;
@@ -1086,7 +1484,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       const modelType = 1; // 使用精品模型（大模型音色）
       // 按照腾讯云API文档格式设置参数
       const longTextParams = {
-        Text: text,
+        Text: finalText,
         ProjectId: 0, // 项目ID，0表示默认项目（如果资源包绑定到特定项目，请修改为对应的ProjectId）
         ModelType: modelType, // 模型类型：1-精品模型（大模型音色）
         Volume: 0, // 音量：范围[-10, 10]，0为正常音量
@@ -1271,24 +1669,114 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       
       console.log('✅ 从响应中获取音频URL:', audioUrl);
       
-      // 下载音频文件
-      const audioResponse = await fetch(audioUrl);
-      if (!audioResponse.ok) {
-        throw new Error(`下载音频文件失败: ${audioResponse.statusText}`);
+      // 下载音频文件（添加超时和重试机制）
+      let audioResponse;
+      const maxDownloadRetries = 3;
+      let downloadError;
+      
+      for (let retry = 0; retry < maxDownloadRetries; retry++) {
+        try {
+          if (retry > 0) {
+            console.log(`🔄 重试下载音频文件 (${retry}/${maxDownloadRetries - 1})...`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * retry));
+          }
+          
+          // 每次重试都创建新的AbortController和超时
+          const downloadController = new AbortController();
+          const downloadTimeoutId = setTimeout(() => downloadController.abort(), 60000); // 60秒超时
+          
+          try {
+            audioResponse = await fetch(audioUrl, {
+              signal: downloadController.signal
+            });
+            clearTimeout(downloadTimeoutId);
+          } catch (fetchError) {
+            clearTimeout(downloadTimeoutId);
+            throw fetchError;
+          }
+          
+          if (!audioResponse.ok) {
+            throw new Error(`下载音频文件失败: ${audioResponse.statusText}`);
+          }
+          
+          const audioBlob = await audioResponse.blob();
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          buffer = Buffer.from(arrayBuffer);
+          console.log('✅ 音频文件下载完成，Buffer长度:', buffer.length);
+          break; // 成功则跳出循环
+        } catch (error) {
+          downloadError = error;
+          
+          if (error.name === 'AbortError') {
+            console.error(`❌ 下载音频文件超时 (尝试 ${retry + 1}/${maxDownloadRetries})`);
+            if (retry < maxDownloadRetries - 1) {
+              continue;
+            }
+            throw new Error('下载音频文件超时（60秒）');
+          }
+          
+          if (error.code === 'ECONNRESET' || error.message.includes('ECONNRESET')) {
+            console.error(`❌ 下载音频文件连接重置 (尝试 ${retry + 1}/${maxDownloadRetries}):`, error.message);
+            if (retry < maxDownloadRetries - 1) {
+              continue;
+            }
+          }
+          
+          // 最后一次尝试失败，抛出错误
+          if (retry === maxDownloadRetries - 1) {
+            throw new Error(`下载音频文件失败（已重试${maxDownloadRetries}次）: ${error.message}`);
+          }
+        }
       }
       
-      const audioBlob = await audioResponse.blob();
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-      console.log('✅ 音频文件下载完成，Buffer长度:', buffer.length);
+      if (!buffer) {
+        throw new Error(`下载音频文件失败（已重试${maxDownloadRetries}次）: ${downloadError?.message || '未知错误'}`);
+      }
     
-    // 将音频文件上传到LeanCloud
+    // 将音频文件上传到LeanCloud（添加重试机制）
     const fileName = `audio_${contentId}_${Date.now()}.mp3`;
     const file = new AV.File(fileName, buffer, 'audio/mpeg');
-    console.log('📤 上传音频文件到LeanCloud:', fileName);
-    await file.save();
-    const finalAudioUrl = file.url();
-    console.log('✅ 音频文件上传成功，URL:', finalAudioUrl);
+    console.log('📤 上传音频文件到LeanCloud:', fileName, '文件大小:', buffer.length, 'bytes');
+    
+    // 重试上传，最多3次
+    let finalAudioUrl;
+    const maxRetries = 3;
+    let lastError;
+    
+    for (let retry = 0; retry < maxRetries; retry++) {
+      try {
+        if (retry > 0) {
+          console.log(`🔄 重试上传音频文件 (${retry}/${maxRetries - 1})...`);
+          // 等待一段时间后重试
+          await new Promise(resolve => setTimeout(resolve, 2000 * retry));
+        }
+        
+        await file.save();
+        finalAudioUrl = file.url();
+        console.log('✅ 音频文件上传成功，URL:', finalAudioUrl);
+        break; // 成功则跳出循环
+      } catch (uploadError) {
+        lastError = uploadError;
+        console.error(`❌ 上传音频文件失败 (尝试 ${retry + 1}/${maxRetries}):`, uploadError.message);
+        
+        // 如果是连接重置错误，继续重试
+        if (uploadError.code === 'ECONNRESET' || uploadError.message.includes('ECONNRESET')) {
+          if (retry < maxRetries - 1) {
+            console.log(`⏳ 连接重置，将在 ${2 * (retry + 1)} 秒后重试...`);
+            continue;
+          }
+        }
+        
+        // 最后一次尝试失败，抛出错误
+        if (retry === maxRetries - 1) {
+          throw new Error(`上传音频文件到LeanCloud失败（已重试${maxRetries}次）: ${uploadError.message}`);
+        }
+      }
+    }
+    
+    if (!finalAudioUrl) {
+      throw new Error(`上传音频文件到LeanCloud失败（已重试${maxRetries}次）: ${lastError?.message || '未知错误'}`);
+    }
     
     // 更新ExtractedContent记录，根据language参数保存到对应字段
     if (contentObj) {
@@ -2031,10 +2519,673 @@ ${textContent}
 });
 
 // 步骤3: 生成视频（将无声视频与音频合并）
+// 生成字幕文件的辅助函数（使用腾讯云语音识别）
+// 字幕提前量（秒），让字幕提前出现以匹配音频
+const SUBTITLE_ADVANCE_TIME = 0.7; // 提前0.7秒，增加提前量以改善同步
+
+async function generateSubtitleFile(audioUrl, language, tempDir, contentId, timestamp) {
+  try {
+    console.log(`📝 开始使用腾讯云ASR生成${language === 'zh' ? '中文' : '英文'}字幕，音频URL: ${audioUrl}`);
+    
+    if (!TENCENT_SECRET_ID || !TENCENT_SECRET_KEY) {
+      throw new Error('腾讯云ASR Secret未配置，请设置TENCENT_SECRET_ID和TENCENT_SECRET_KEY环境变量');
+    }
+    
+    // 根据语言选择引擎模型
+    // 中文：16k_zh（16k中文通用）
+    // 英文：16k_en（16k英文）
+    // 中英混合：16k_zh_en（16k中英混合）
+    const engineModelType = language === 'zh' ? '16k_zh' : '16k_en';
+    
+    // 创建语音识别任务
+    console.log(`🎤 创建腾讯云ASR识别任务，引擎: ${engineModelType}`);
+    const createTaskParams = {
+      EngineModelType: engineModelType,
+      ChannelNum: 1, // 单声道
+      ResTextFormat: 0, // 返回带时间戳的文本格式
+      SourceType: 0, // 0表示音频URL方式
+      Url: audioUrl, // 音频URL
+    };
+    
+    console.log('📋 CreateRecTask 请求参数:', JSON.stringify(createTaskParams, null, 2));
+    const createResponse = await tencentAsrClient.CreateRecTask(createTaskParams);
+    console.log('✅ CreateRecTask 响应:', JSON.stringify(createResponse, null, 2));
+    
+    if (createResponse.Error) {
+      throw new Error(`创建ASR任务失败: ${createResponse.Error.Message || JSON.stringify(createResponse.Error)}`);
+    }
+    
+    const taskId = createResponse.Data?.TaskId;
+    if (!taskId) {
+      throw new Error('ASR任务创建成功但未返回TaskId');
+    }
+    
+    console.log(`✅ ASR任务已创建，TaskId: ${taskId}`);
+    
+    // 轮询查询任务状态（最多等待5分钟）
+    const maxAttempts = 60; // 最多查询60次
+    const pollInterval = 5000; // 每5秒查询一次
+    let recognitionResult = null;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      
+      console.log(`📊 查询ASR任务状态 (${attempt + 1}/${maxAttempts})，TaskId: ${taskId}`);
+      const queryParams = {
+        TaskId: taskId
+      };
+      
+      const queryResponse = await tencentAsrClient.DescribeTaskStatus(queryParams);
+      console.log(`📊 查询结果 (${attempt + 1}/${maxAttempts}):`, JSON.stringify(queryResponse, null, 2));
+      
+      if (queryResponse.Error) {
+        throw new Error(`查询ASR任务状态失败: ${queryResponse.Error.Message || JSON.stringify(queryResponse.Error)}`);
+      }
+      
+      const status = queryResponse.Data?.Status;
+      if (status === 2) { // 2表示任务完成
+        recognitionResult = queryResponse.Data;
+        console.log('✅ ASR任务完成，获取到识别结果');
+        break;
+      } else if (status === 3) { // 3表示任务失败
+        throw new Error(`ASR任务失败: ${queryResponse.Data?.ErrorMsg || '未知错误'}`);
+      }
+      // status === 0 表示任务处理中，继续轮询
+    }
+    
+    if (!recognitionResult) {
+      throw new Error('ASR任务超时，未能获取识别结果');
+    }
+    
+    // 解析识别结果
+    // ResTextFormat=0 返回格式：带时间戳的文本
+    // 可能返回在Result、ResultDetail或Data字段中
+    let resultText = recognitionResult.Result || recognitionResult.ResultDetail || recognitionResult.Data || '';
+    
+    // 如果resultText是对象，尝试提取文本内容
+    if (typeof resultText === 'object') {
+      resultText = resultText.Text || resultText.Result || JSON.stringify(resultText);
+    }
+    
+    if (!resultText || (typeof resultText === 'string' && resultText.trim().length === 0)) {
+      throw new Error('ASR识别结果为空');
+    }
+    
+    console.log('📝 ASR识别结果文本:', typeof resultText === 'string' ? resultText.substring(0, 500) : JSON.stringify(resultText).substring(0, 500));
+    
+    // 将识别结果转换为SRT格式
+    const srtPath = path.join(tempDir, `subtitle_${contentId}_${language}_${timestamp}.srt`);
+    const srtContent = convertAsrResultToSRT(resultText);
+    
+    await fs.writeFile(srtPath, srtContent, 'utf8');
+    console.log(`✅ 字幕文件生成成功: ${srtPath}`);
+    
+    return srtPath;
+  } catch (error) {
+    console.error('❌ 使用腾讯云ASR生成字幕失败:', error);
+    console.error('❌ 错误详情:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    // 如果生成失败，返回null，视频仍然可以生成，只是没有字幕
+    return null;
+  }
+}
+
+// 将腾讯云ASR识别结果转换为SRT格式
+function convertAsrResultToSRT(resultText) {
+  // ASR返回格式可能是多种：
+  // 格式1: "00:00:00,000 --> 00:00:03,000 第一段文字\n00:00:03,000 --> 00:00:06,000 第二段文字"
+  // 格式2: JSON格式，包含时间戳和文本数组
+  // 格式3: 纯文本，需要根据时间戳分段
+  
+  let srtContent = '';
+  let index = 1;
+  
+  try {
+    // 先尝试解析JSON格式
+    let parsedData = null;
+    try {
+      parsedData = typeof resultText === 'string' ? JSON.parse(resultText) : resultText;
+    } catch (e) {
+      // 不是JSON格式，继续按文本处理
+    }
+    
+    if (parsedData && typeof parsedData === 'object') {
+      // JSON格式：可能包含words、sentences等字段
+      console.log('📋 ASR结果JSON格式:', JSON.stringify(parsedData, null, 2));
+      
+      // 尝试提取words数组（包含时间戳的单词）
+      if (parsedData.words && Array.isArray(parsedData.words)) {
+        // 直接使用ASR返回的单词时间戳，不按标点符号分段
+        // 将连续的单词组合成合理的字幕块（每3-5个单词一组，或根据时间间隔）
+        const subtitleBlocks = [];
+        let currentBlock = { words: [], startTime: null, endTime: null };
+        const MAX_WORDS_PER_BLOCK = 5; // 每个字幕块最多5个单词
+        const MAX_TIME_GAP = 0.5; // 如果单词间隔超过0.5秒，开始新的字幕块
+        
+        for (let i = 0; i < parsedData.words.length; i++) {
+          const word = parsedData.words[i];
+          const wordStartTime = word.start_time !== undefined ? word.start_time / 1000 : null;
+          const wordEndTime = word.end_time !== undefined ? word.end_time / 1000 : null;
+          const wordText = word.word || word.text || '';
+          
+          // 检查是否需要开始新的字幕块
+          if (currentBlock.words.length > 0) {
+            const timeGap = wordStartTime !== null && currentBlock.endTime !== null 
+              ? wordStartTime - currentBlock.endTime 
+              : 0;
+            
+            // 如果单词间隔太大，或者当前块已经有足够单词，开始新块
+            if (timeGap > MAX_TIME_GAP || currentBlock.words.length >= MAX_WORDS_PER_BLOCK) {
+              if (currentBlock.words.length > 0 && currentBlock.startTime !== null) {
+                subtitleBlocks.push({
+                  text: currentBlock.words.join(''),
+                  startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
+                  endTime: currentBlock.endTime || 0
+                });
+              }
+              currentBlock = { words: [], startTime: null, endTime: null };
+            }
+          }
+          
+          // 添加单词到当前块
+          if (wordText.trim().length > 0) {
+            if (currentBlock.startTime === null && wordStartTime !== null) {
+              currentBlock.startTime = wordStartTime;
+            }
+            if (wordEndTime !== null) {
+              currentBlock.endTime = wordEndTime;
+            }
+            currentBlock.words.push(wordText);
+          }
+        }
+        
+        // 添加最后一个块
+        if (currentBlock.words.length > 0 && currentBlock.startTime !== null) {
+          subtitleBlocks.push({
+            text: currentBlock.words.join(''),
+            startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
+            endTime: currentBlock.endTime || 0
+          });
+        }
+        
+        // 生成SRT
+        for (const block of subtitleBlocks) {
+          srtContent += `${index}\n`;
+          srtContent += `${formatSRTTime(block.startTime)} --> ${formatSRTTime(block.endTime)}\n`;
+          srtContent += `${block.text.trim()}\n\n`;
+          index++;
+        }
+      } else if (parsedData.sentences && Array.isArray(parsedData.sentences)) {
+        // 如果有sentences数组
+        for (const sentence of parsedData.sentences) {
+          const startTime = Math.max(0, (sentence.start_time || sentence.startTime || 0) / 1000 - SUBTITLE_ADVANCE_TIME);
+          const endTime = (sentence.end_time || sentence.endTime || 0) / 1000;
+          const text = sentence.text || sentence.word || '';
+          
+          srtContent += `${index}\n`;
+          srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(endTime)}\n`;
+          srtContent += `${text.trim()}\n\n`;
+          index++;
+        }
+      }
+    }
+    
+    // 如果不是JSON格式或JSON解析失败，尝试按行解析文本格式
+    if (srtContent.length === 0) {
+      const textStr = typeof resultText === 'string' ? resultText : JSON.stringify(resultText);
+      const lines = textStr.split('\n').filter(line => line.trim().length > 0);
+      
+      for (const line of lines) {
+        // 格式1: [M:SS.mmm,M:SS.mmm]  文本内容（腾讯云ASR标准格式）
+        // 例如：[0:0.040,0:22.140]  美国花卉产业的崛起...
+        const bracketTimeMatch = line.match(/\[(\d+):(\d+\.\d+),(\d+):(\d+\.\d+)\]\s*(.*)/);
+        
+        if (bracketTimeMatch) {
+          const [, startMin, startSec, endMin, endSec, text] = bracketTimeMatch;
+          
+          // 转换为SRT时间格式：HH:MM:SS,mmm，并提前字幕时间
+          const startSeconds = parseInt(startMin) * 60 + parseFloat(startSec) - SUBTITLE_ADVANCE_TIME;
+          const startTime = formatSRTTime(Math.max(0, startSeconds));
+          const endTime = convertToSRTTime(parseInt(endMin), parseFloat(endSec));
+          
+          // 清理文本：移除多余空格，过滤掉明显不是文本的内容
+          const cleanText = cleanSubtitleText(text);
+          
+          if (cleanText && cleanText.trim().length > 0) {
+            srtContent += `${index}\n`;
+            srtContent += `${startTime} --> ${endTime}\n`;
+            srtContent += `${cleanText}\n\n`;
+            index++;
+          }
+          continue;
+        }
+        
+        // 格式2: HH:MM:SS,mmm --> HH:MM:SS,mmm 文字（标准SRT格式）
+        const timeTextMatch = line.match(/(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*[-–—>]+\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*(.*)/);
+        
+        if (timeTextMatch) {
+          let [, startTime, endTime, text] = timeTextMatch;
+          // 统一时间格式（将.替换为,）
+          startTime = startTime.replace('.', ',');
+          endTime = endTime.replace('.', ',');
+          
+          // 提前字幕开始时间
+          const startSeconds = parseSRTTime(startTime) - SUBTITLE_ADVANCE_TIME;
+          const adjustedStartTime = formatSRTTime(Math.max(0, startSeconds));
+          
+          const cleanText = cleanSubtitleText(text);
+          if (cleanText && cleanText.trim().length > 0) {
+            srtContent += `${index}\n`;
+            srtContent += `${adjustedStartTime} --> ${endTime}\n`;
+            srtContent += `${cleanText}\n\n`;
+            index++;
+          }
+          continue;
+        }
+        
+        // 格式3: 00:00:00.000-00:00:03.000 文字（其他时间格式）
+        const altMatch = line.match(/(\d{2}:\d{2}:\d{2}[,\.]\d{3})[-–—](\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*(.*)/);
+        if (altMatch) {
+          let [, startTime, endTime, text] = altMatch;
+          startTime = startTime.replace('.', ',');
+          endTime = endTime.replace('.', ',');
+          
+          const cleanText = cleanSubtitleText(text);
+          if (cleanText && cleanText.trim().length > 0) {
+            srtContent += `${index}\n`;
+            srtContent += `${startTime} --> ${endTime}\n`;
+            srtContent += `${cleanText}\n\n`;
+            index++;
+          }
+        }
+      }
+    }
+    
+    // 如果仍然没有解析到内容，使用简单分段方法
+    if (srtContent.length === 0) {
+      console.warn('⚠️ ASR结果无法解析为标准格式，使用简单分段方法');
+      const textStr = typeof resultText === 'string' ? resultText : JSON.stringify(resultText);
+      // 先清理文本，移除时间戳等
+      const cleanedText = cleanSubtitleText(textStr);
+      if (cleanedText && cleanedText.trim().length > 0) {
+        // 简单分段方法：不再按标点符号分段，而是根据文本长度动态分配时间
+        const sentences = cleanedText.split(/[。！？\n\.!?]+/).filter(s => s.trim().length > 0);
+        let currentTime = Math.max(0, 0 - SUBTITLE_ADVANCE_TIME); // 从提前时间开始
+        
+        // 估算总时长（假设每分钟200字，或每字0.3秒）
+        const totalChars = cleanedText.length;
+        const estimatedTotalDuration = Math.max(10, totalChars * 0.3); // 至少10秒
+        const timePerChar = estimatedTotalDuration / totalChars;
+        
+        for (const sentence of sentences) {
+          const cleanSentence = cleanSubtitleText(sentence);
+          if (cleanSentence && cleanSentence.trim().length > 0) {
+            // 根据句子长度动态计算时长
+            const sentenceDuration = Math.max(2, cleanSentence.length * timePerChar); // 至少2秒
+            
+            const startTime = formatSRTTime(Math.max(0, currentTime));
+            currentTime += sentenceDuration;
+            const endTime = formatSRTTime(currentTime);
+            
+            srtContent += `${index}\n`;
+            srtContent += `${startTime} --> ${endTime}\n`;
+            srtContent += `${cleanSentence}\n\n`;
+            index++;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ 解析ASR结果失败:', error);
+    throw new Error(`解析ASR识别结果失败: ${error.message}`);
+  }
+  
+  if (srtContent.length === 0) {
+    throw new Error('ASR识别结果无法转换为SRT格式');
+  }
+  
+  // 直接返回ASR生成的字幕，不再进行额外的分段处理
+  // 这样可以保持与音频的同步性
+  return srtContent;
+}
+
+// 按照标点符号分段字幕，压缩每屏字数
+function segmentSubtitlesByPunctuation(srtContent) {
+  // 解析现有的SRT内容
+  const subtitleBlocks = [];
+  const lines = srtContent.split('\n');
+  
+  let currentBlock = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // 空行表示一个字幕块结束
+    if (line === '') {
+      if (currentBlock) {
+        subtitleBlocks.push(currentBlock);
+        currentBlock = null;
+      }
+      continue;
+    }
+    
+    // 数字行，开始新的字幕块
+    if (/^\d+$/.test(line)) {
+      if (currentBlock) {
+        subtitleBlocks.push(currentBlock);
+      }
+      currentBlock = {
+        index: parseInt(line),
+        timeRange: '',
+        text: ''
+      };
+      continue;
+    }
+    
+    // 时间范围行
+    if (line.includes('-->')) {
+      if (currentBlock) {
+        currentBlock.timeRange = line;
+      }
+      continue;
+    }
+    
+    // 文本行
+    if (currentBlock && !currentBlock.timeRange) {
+      // 如果还没有时间范围，这行应该是时间范围
+      if (line.includes('-->')) {
+        currentBlock.timeRange = line;
+      }
+    } else if (currentBlock) {
+      // 已经有时间范围，这是文本内容
+      if (currentBlock.text) {
+        currentBlock.text += ' ' + line;
+      } else {
+        currentBlock.text = line;
+      }
+    }
+  }
+  
+  // 添加最后一个块
+  if (currentBlock) {
+    subtitleBlocks.push(currentBlock);
+  }
+  
+  // 对每个字幕块进行分段
+  const segmentedBlocks = [];
+  
+  for (const block of subtitleBlocks) {
+    // 解析时间范围
+    const timeMatch = block.timeRange.match(/(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})/);
+    if (!timeMatch) {
+      // 如果无法解析时间，直接使用原块
+      segmentedBlocks.push(block);
+      continue;
+    }
+    
+    const startTimeStr = timeMatch[1];
+    const endTimeStr = timeMatch[2];
+    
+    // 将时间字符串转换为秒数，并提前字幕开始时间
+    const startSeconds = Math.max(0, parseSRTTime(startTimeStr) - SUBTITLE_ADVANCE_TIME);
+    const endSeconds = parseSRTTime(endTimeStr);
+    const duration = endSeconds - startSeconds;
+    
+    // 按照标点符号分段文本
+    // 中英文标点：。！？，、；：. ! ? , ; :
+    const segments = splitTextByPunctuation(block.text);
+    
+    if (segments.length === 0) {
+      segmentedBlocks.push({
+        ...block,
+        timeRange: `${formatSRTTime(startSeconds)} --> ${endTimeStr}`
+      });
+      continue;
+    }
+    
+    // 如果只有一个段落，直接使用（但调整开始时间）
+    if (segments.length === 1) {
+      segmentedBlocks.push({
+        ...block,
+        timeRange: `${formatSRTTime(startSeconds)} --> ${endTimeStr}`
+      });
+      continue;
+    }
+    
+    // 多个段落，根据字数比例重新分配时间
+    // 计算每个段落的字数（中文字符按1个字符计算，英文单词按平均长度计算）
+    const segmentLengths = segments.map(seg => {
+      const text = seg.trim();
+      if (!text) return 0;
+      // 中文字符数 + 英文单词数（按平均4个字符一个单词估算）
+      const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const englishWords = text.replace(/[\u4e00-\u9fa5]/g, '').trim().split(/\s+/).filter(w => w.length > 0).length;
+      return chineseChars + englishWords * 2; // 英文单词权重为2
+    });
+    
+    const totalLength = segmentLengths.reduce((sum, len) => sum + len, 0);
+    
+    if (totalLength === 0) {
+      // 如果没有有效字数，平均分配时间
+      const timePerSegment = duration / segments.length;
+      let currentTime = startSeconds;
+      for (let i = 0; i < segments.length; i++) {
+        const segmentText = segments[i].trim();
+        if (segmentText.length === 0) continue;
+        const segmentStartTime = currentTime;
+        const segmentEndTime = Math.min(currentTime + timePerSegment, endSeconds);
+        segmentedBlocks.push({
+          index: block.index + (i > 0 ? i * 0.001 : 0),
+          timeRange: `${formatSRTTime(segmentStartTime)} --> ${formatSRTTime(segmentEndTime)}`,
+          text: segmentText
+        });
+        currentTime = segmentEndTime;
+        if (currentTime >= endSeconds) break;
+      }
+    } else {
+      // 设置最小和最大停留时长（秒）
+      const MIN_DURATION = 1.5; // 最短1.5秒
+      const MAX_DURATION = 8.0; // 最长8秒
+      
+      // 先按字数比例计算基础时长
+      const baseDurations = segmentLengths.map(len => {
+        return (len / totalLength) * duration;
+      });
+      
+      // 应用最小和最大时长限制
+      const adjustedDurations = baseDurations.map(dur => {
+        return Math.max(MIN_DURATION, Math.min(MAX_DURATION, dur));
+      });
+      
+      // 如果调整后的总时长超过原始时长，按比例缩放
+      const totalAdjustedDuration = adjustedDurations.reduce((sum, d) => sum + d, 0);
+      const scaleFactor = duration / Math.max(totalAdjustedDuration, duration);
+      const finalDurations = adjustedDurations.map(dur => dur * scaleFactor);
+      
+      let currentTime = startSeconds;
+      
+      for (let i = 0; i < segments.length; i++) {
+        const segmentText = segments[i].trim();
+        if (segmentText.length === 0) continue;
+        
+        let segmentDuration = finalDurations[i];
+        
+        // 确保不超过剩余时间
+        const remainingTime = endSeconds - currentTime;
+        segmentDuration = Math.min(segmentDuration, remainingTime);
+        
+        // 确保至少是最小时长（如果还有足够时间）
+        if (remainingTime >= MIN_DURATION && segmentDuration < MIN_DURATION) {
+          segmentDuration = Math.min(MIN_DURATION, remainingTime);
+        }
+        
+        const segmentStartTime = currentTime;
+        const segmentEndTime = Math.min(currentTime + segmentDuration, endSeconds);
+        
+        segmentedBlocks.push({
+          index: block.index + (i > 0 ? i * 0.001 : 0), // 保持索引顺序
+          timeRange: `${formatSRTTime(segmentStartTime)} --> ${formatSRTTime(segmentEndTime)}`,
+          text: segmentText
+        });
+        
+        currentTime = segmentEndTime;
+        
+        // 如果已经到达结束时间，停止分配
+        if (currentTime >= endSeconds) break;
+      }
+    }
+  }
+  
+  // 重新生成SRT内容
+  let newSrtContent = '';
+  let newIndex = 1;
+  
+  for (const block of segmentedBlocks) {
+    newSrtContent += `${newIndex}\n`;
+    newSrtContent += `${block.timeRange}\n`;
+    newSrtContent += `${block.text}\n\n`;
+    newIndex++;
+  }
+  
+  return newSrtContent;
+}
+
+// 按照标点符号分段文本
+function splitTextByPunctuation(text) {
+  if (!text || typeof text !== 'string') {
+    return [];
+  }
+  
+  // 中英文标点符号：。！？，、；：. ! ? , ; :
+  // 使用正则表达式分割，保留标点符号
+  const segments = [];
+  let currentSegment = '';
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    currentSegment += char;
+    
+    // 遇到标点符号，结束当前段落
+    if (/[。！？，、；：.!,;:?]/.test(char)) {
+      const trimmed = currentSegment.trim();
+      if (trimmed.length > 0) {
+        segments.push(trimmed);
+      }
+      currentSegment = '';
+    }
+  }
+  
+  // 添加最后一段（如果有）
+  const trimmed = currentSegment.trim();
+  if (trimmed.length > 0) {
+    segments.push(trimmed);
+  }
+  
+  // 如果没有任何分段（没有标点），返回原文本
+  if (segments.length === 0) {
+    return [text.trim()];
+  }
+  
+  return segments;
+}
+
+// 解析SRT时间格式为秒数
+function parseSRTTime(timeStr) {
+  // 格式：HH:MM:SS,mmm
+  const match = timeStr.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+  if (!match) {
+    return 0;
+  }
+  
+  const hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  const seconds = parseInt(match[3]);
+  const milliseconds = parseInt(match[4]);
+  
+  return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+}
+
+// 简单的字幕分段方法（备用方案）
+function generateSimpleSubtitles(text, audioDurationSeconds) {
+  const words = text.split(/[，。！？\s,\.!?]+/).filter(w => w.trim().length > 0);
+  const segmentCount = Math.max(1, Math.floor(audioDurationSeconds / 3)); // 每3秒一段
+  const wordsPerSegment = Math.ceil(words.length / segmentCount);
+  
+  const subtitles = [];
+  let currentTime = Math.max(0, 0 - SUBTITLE_ADVANCE_TIME); // 从提前时间开始
+  const timePerSegment = audioDurationSeconds / segmentCount;
+  
+  for (let i = 0; i < segmentCount; i++) {
+    const startWords = i * wordsPerSegment;
+    const endWords = Math.min(startWords + wordsPerSegment, words.length);
+    const segmentText = words.slice(startWords, endWords).join(' ');
+    
+    if (segmentText.trim().length === 0) continue;
+    
+    const startTime = formatSRTTime(Math.max(0, currentTime));
+    currentTime += timePerSegment;
+    const endTime = formatSRTTime(Math.min(currentTime, audioDurationSeconds));
+    
+    subtitles.push({
+      index: subtitles.length + 1,
+      startTime: startTime,
+      endTime: endTime,
+      text: segmentText.trim()
+    });
+  }
+  
+  return { subtitles };
+}
+
+// 格式化SRT时间格式 (HH:MM:SS,mmm)
+function formatSRTTime(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const milliseconds = Math.floor((seconds % 1) * 1000);
+  
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
+}
+
+// 将分钟和秒转换为SRT时间格式
+// 例如：convertToSRTTime(0, 22.140) -> "00:00:22,140"
+function convertToSRTTime(minutes, seconds) {
+  const totalSeconds = minutes * 60 + seconds;
+  return formatSRTTime(totalSeconds);
+}
+
+// 清理字幕文本，过滤掉时间戳、数字等非文本内容
+function cleanSubtitleText(text) {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+  
+  let cleaned = text.trim();
+  
+  // 移除时间戳格式：[M:SS.mmm,M:SS.mmm] 或类似格式
+  cleaned = cleaned.replace(/\[\d+:\d+\.\d+,\d+:\d+\.\d+\]/g, '');
+  
+  // 移除单独的时间戳格式，如 "0:31,140" 或 "0:31.140"
+  cleaned = cleaned.replace(/\b\d+:\d+[,\.]\d+\b/g, '');
+  
+  // 移除纯数字（可能是误识别的时间戳）
+  // 但保留数字在文本中的情况（如"19世纪"）
+  cleaned = cleaned.replace(/\b\d+[,\.]\d+\b/g, ''); // 移除小数
+  
+  // 移除多余的空格
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  // 如果清理后只剩下数字或特殊字符，返回空字符串
+  if (/^[\d\s,\.:;，。：；]+$/.test(cleaned)) {
+    return '';
+  }
+  
+  return cleaned;
+}
+
 router.post('/content/:contentId/generate-video', async (req, res) => {
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
+  let tempSubtitlePath = null;
   
   try {
     console.log('🚀 ========== 生成视频API被调用 ==========');
@@ -2043,14 +3194,6 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     
     const { contentId } = req.params;
     const { audioUrl, language = 'zh' } = req.body;
-
-    if (!audioUrl) {
-      console.error('❌ 缺少音频URL');
-      return res.status(400).json({
-        success: false,
-        message: '缺少音频URL'
-      });
-    }
 
     console.log(`📝 开始处理${language === 'zh' ? '中文' : '英文'}视频生成，ContentId: ${contentId}`);
 
@@ -2077,15 +3220,61 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       });
     }
 
-    const silentVideoUrl = contentObj.get('silentVideoUrl');
-    console.log('📹 无声视频URL:', silentVideoUrl);
+    // 根据语言确定使用哪个音频URL
+    let finalAudioUrl = audioUrl;
+    if (!finalAudioUrl) {
+      // 如果前端没有传递audioUrl，从content对象中获取
+      if (language === 'en') {
+        finalAudioUrl = contentObj.get('audioUrlEn');
+        if (!finalAudioUrl) {
+          return res.status(400).json({
+            success: false,
+            message: '缺少英文音频URL，请先生成英文音频'
+          });
+        }
+      } else {
+        finalAudioUrl = contentObj.get('audioUrl');
+        if (!finalAudioUrl) {
+          return res.status(400).json({
+            success: false,
+            message: '缺少中文音频URL，请先生成中文音频'
+          });
+        }
+      }
+    }
+
+    console.log(`📻 使用的音频URL (${language === 'zh' ? '中文' : '英文'}):`, finalAudioUrl);
     
-    if (!silentVideoUrl) {
-      console.error('❌ 无声视频URL不存在');
+    if (!finalAudioUrl) {
+      console.error('❌ 缺少音频URL');
       return res.status(400).json({
         success: false,
-        message: '请先生成无声视频（步骤2）',
-        contentId: contentId
+        message: `缺少${language === 'zh' ? '中文' : '英文'}音频URL`
+      });
+    }
+
+    // 获取书籍信息以获取博客封面图
+    const bookId = contentObj.get('book')?.id || contentObj.get('bookId');
+    if (!bookId) {
+      return res.status(400).json({
+        success: false,
+        message: '内容未关联到书籍'
+      });
+    }
+    
+    const book = await new AV.Query('Book').get(bookId);
+    if (!book) {
+      return res.status(404).json({
+        success: false,
+        message: '书籍不存在'
+      });
+    }
+    
+    const blogCoverUrl = book.get('blogCoverUrl');
+    if (!blogCoverUrl) {
+      return res.status(400).json({
+        success: false,
+        message: '请先生成博客封面图'
       });
     }
 
@@ -2093,73 +3282,41 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     contentObj.set('videoStatus', 'generating');
     await contentObj.save();
 
-    console.log(`📝 开始合并${language === 'zh' ? '中文' : '英文'}视频和音频`);
+    console.log(`📝 开始生成${language === 'zh' ? '中文' : '英文'}视频（使用博客封面图）`);
 
     const tempDir = os.tmpdir();
     const timestamp = Date.now();
     
-    // 下载无声视频
-    // 注意：不要修改URL的大小写，LeanCloud的域名是大小写敏感的
-    let finalSilentVideoUrl = silentVideoUrl;
-    // 只将http替换为https，但保持域名的大小写
-    if (finalSilentVideoUrl.startsWith('http://')) {
-      finalSilentVideoUrl = finalSilentVideoUrl.replace(/^http:\/\//, 'https://');
-    }
-    tempVideoPath = path.join(tempDir, `silent_video_${contentId}_${timestamp}.mp4`);
-    console.log('📥 开始下载无声视频:', finalSilentVideoUrl);
-    console.log('📊 无声视频URL类型:', typeof finalSilentVideoUrl);
-    console.log('📊 无声视频URL长度:', finalSilentVideoUrl?.length);
-    
-    // 验证URL格式
-    if (!finalSilentVideoUrl || !finalSilentVideoUrl.startsWith('http')) {
-      console.error('❌ 无声视频URL格式无效:', finalSilentVideoUrl);
-      throw new Error(`无声视频URL格式无效: ${finalSilentVideoUrl}`);
-    }
-    
-    let videoResponse;
-    try {
-      console.log('🌐 发起fetch请求（超时时间：60秒）...');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
-      
-      videoResponse = await fetch(finalSilentVideoUrl, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      console.log('✅ fetch请求完成，状态码:', videoResponse.status);
-    } catch (fetchError) {
-      console.error('❌ 下载无声视频失败（网络错误）:', fetchError);
-      console.error('❌ 错误类型:', fetchError.constructor.name);
-      console.error('❌ 错误代码:', fetchError.code);
-      console.error('❌ 尝试的URL:', finalSilentVideoUrl);
-      console.error('❌ 完整错误:', JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError)));
-      throw new Error(`下载无声视频失败（网络错误）: ${fetchError.message || fetchError.code || '未知错误'}. URL: ${finalSilentVideoUrl.substring(0, 80)}`);
-    }
-    
-    if (!videoResponse.ok) {
-      const errorText = await videoResponse.text().catch(() => '无法读取错误响应');
-      console.error('❌ 下载无声视频失败:', videoResponse.status, videoResponse.statusText);
-      console.error('❌ 错误响应:', errorText.substring(0, 200));
-      throw new Error(`下载无声视频失败 (${videoResponse.status}): ${videoResponse.statusText}`);
-    }
-    
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    await fs.writeFile(tempVideoPath, videoBuffer);
-    console.log('✅ 无声视频下载完成，大小:', videoBuffer.length, 'bytes');
-    
-    // 下载音频
-    let finalAudioUrl = audioUrl;
+    // 下载音频（使用之前确定的finalAudioUrl）
     // 只将http替换为https，但保持域名的大小写
     if (finalAudioUrl.startsWith('http://')) {
       finalAudioUrl = finalAudioUrl.replace(/^http:\/\//, 'https://');
     }
+    
+    // 验证音频URL格式
+    if (!finalAudioUrl || !finalAudioUrl.startsWith('http')) {
+      console.error('❌ 音频URL格式无效:', finalAudioUrl);
+      throw new Error(`音频URL格式无效: ${finalAudioUrl}`);
+    }
+    
+    // 对于腾讯云COS的URL，确保URL编码正确
+    // 如果URL包含已编码的字符，不要重复编码
+    let audioUrlToFetch = finalAudioUrl;
+    try {
+      // 尝试解析URL，如果失败则说明URL格式有问题
+      const urlObj = new URL(finalAudioUrl);
+      // 如果URL解析成功，使用原始URL（保持签名参数不变）
+      audioUrlToFetch = urlObj.toString();
+    } catch (urlError) {
+      console.warn('⚠️ URL解析失败，使用原始URL:', urlError.message);
+      // 如果URL解析失败，尝试编码整个URL
+      audioUrlToFetch = encodeURI(finalAudioUrl);
+    }
+    
     tempAudioPath = path.join(tempDir, `audio_${contentId}_${timestamp}.mp3`);
-    console.log('📥 开始下载音频:', finalAudioUrl);
+    console.log('📥 开始下载音频');
+    console.log('📥 原始URL:', finalAudioUrl);
+    console.log('📥 处理后的URL:', audioUrlToFetch);
     
     let audioResponse;
     try {
@@ -2167,50 +3324,241 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
       
-      audioResponse = await fetch(finalAudioUrl, {
+      // 对于腾讯云COS，可能需要添加Referer头
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+      };
+      
+      // 如果是腾讯云COS URL，添加Referer
+      if (audioUrlToFetch.includes('myqcloud.com')) {
+        headers['Referer'] = 'https://console.cloud.tencent.com/';
+      }
+      
+      audioResponse = await fetch(audioUrlToFetch, {
         method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        signal: controller.signal
+        headers: headers,
+        signal: controller.signal,
+        redirect: 'follow' // 跟随重定向
       });
       
       clearTimeout(timeoutId);
       console.log('✅ 音频fetch请求完成，状态码:', audioResponse.status);
+      console.log('✅ 响应头:', JSON.stringify(Object.fromEntries(audioResponse.headers.entries()), null, 2));
     } catch (fetchError) {
       console.error('❌ 下载音频失败（网络错误）:', fetchError);
-      console.error('❌ 尝试的URL:', finalAudioUrl);
-      throw new Error(`下载音频失败（网络错误）: ${fetchError.message}`);
+      console.error('❌ 尝试的URL:', audioUrlToFetch);
+      console.error('❌ 原始URL:', finalAudioUrl);
+      
+      // 如果是网络错误，尝试使用原始URL
+      if (audioUrlToFetch !== finalAudioUrl) {
+        console.log('🔄 尝试使用原始URL重新下载...');
+        try {
+          const retryController = new AbortController();
+          const retryTimeoutId = setTimeout(() => retryController.abort(), 60000);
+          audioResponse = await fetch(finalAudioUrl, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            signal: retryController.signal
+          });
+          clearTimeout(retryTimeoutId);
+          console.log('✅ 使用原始URL重试成功，状态码:', audioResponse.status);
+        } catch (retryError) {
+          throw new Error(`下载音频失败（网络错误）: ${fetchError.message}`);
+        }
+      } else {
+        throw new Error(`下载音频失败（网络错误）: ${fetchError.message}`);
+      }
     }
     
     if (!audioResponse.ok) {
       const errorText = await audioResponse.text().catch(() => '无法读取错误响应');
       console.error('❌ 下载音频失败:', audioResponse.status, audioResponse.statusText);
-      console.error('❌ 错误响应:', errorText.substring(0, 200));
-      throw new Error(`下载音频失败 (${audioResponse.status}): ${audioResponse.statusText}`);
+      console.error('❌ 尝试的音频URL:', audioUrlToFetch);
+      console.error('❌ 原始URL:', finalAudioUrl);
+      console.error('❌ 错误响应:', errorText.substring(0, 500));
+      
+      // 提供更详细的错误信息
+      if (audioResponse.status === 404) {
+        // 检查是否是URL编码问题
+        if (finalAudioUrl !== audioUrlToFetch) {
+          throw new Error(`音频文件不存在 (404): 音频URL可能已过期、无效或存在编码问题。请重新生成${language === 'zh' ? '中文' : '英文'}音频。\n原始URL: ${finalAudioUrl.substring(0, 100)}...`);
+        } else {
+          throw new Error(`音频文件不存在 (404): 音频URL可能已过期或无效。请重新生成${language === 'zh' ? '中文' : '英文'}音频。\nURL: ${finalAudioUrl.substring(0, 100)}...`);
+        }
+      } else {
+        throw new Error(`下载${language === 'zh' ? '中文' : '英文'}音频失败 (${audioResponse.status}): ${audioResponse.statusText}`);
+      }
     }
     
     const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
     await fs.writeFile(tempAudioPath, audioBuffer);
     console.log('✅ 音频下载完成，大小:', audioBuffer.length, 'bytes');
     
-    // 合并视频和音频
-    tempOutputPath = path.join(tempDir, `output_${contentId}_${language}_${timestamp}.mp4`);
-    console.log('🎞️ 开始合并视频和音频');
+    // 获取音频时长
+    const audioDuration = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(tempAudioPath, (err, metadata) => {
+        if (err) {
+          console.error('❌ 获取音频时长失败:', err);
+          reject(err);
+        } else {
+          const duration = metadata.format.duration || 0;
+          console.log('✅ 音频时长:', duration, '秒');
+          resolve(duration);
+        }
+      });
+    });
+    
+    const audioDurationSeconds = Math.ceil(audioDuration);
+    console.log('📊 音频总时长:', audioDurationSeconds, '秒');
+    
+    // 使用腾讯云ASR生成字幕文件（基于音频URL）
+    // 确保音频URL是HTTPS格式
+    let audioUrlForASR = finalAudioUrl;
+    if (audioUrlForASR.startsWith('http://')) {
+      audioUrlForASR = audioUrlForASR.replace('http://', 'https://');
+    }
+    
+    console.log('🎤 使用音频URL生成字幕:', audioUrlForASR);
+    tempSubtitlePath = await generateSubtitleFile(
+      audioUrlForASR,
+      language,
+      tempDir,
+      contentId,
+      timestamp
+    );
+    
+    // 下载博客封面图
+    console.log('📥 开始下载博客封面图:', blogCoverUrl);
+    let coverImageResponse;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      coverImageResponse = await fetch(blogCoverUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      throw new Error(`下载博客封面图失败: ${fetchError.message}`);
+    }
+    
+    if (!coverImageResponse.ok) {
+      throw new Error(`下载博客封面图失败 (${coverImageResponse.status}): ${coverImageResponse.statusText}`);
+    }
+    
+    const coverImageBuffer = Buffer.from(await coverImageResponse.arrayBuffer());
+    const coverImagePath = path.join(tempDir, `cover_${contentId}_${timestamp}.jpg`);
+    await fs.writeFile(coverImagePath, coverImageBuffer);
+    console.log('✅ 博客封面图保存完成');
+    
+    // 视频参数（9:16比例，720x1280）
+    const videoWidth = 720;
+    const videoHeight = 1280;
+    const fps = 30;
+    
+    // 使用ffmpeg将博客封面图转换为视频（静态图片，匹配音频时长）
+    tempVideoPath = path.join(tempDir, `video_${contentId}_${timestamp}.mp4`);
+    console.log('🎞️ 开始生成视频（使用博客封面图）');
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
       const timeout = 300000; // 5分钟超时
       
+      // 使用ffmpeg将封面图转换为视频（循环播放以匹配音频时长）
       const ffmpegProcess = ffmpeg()
-        .input(tempVideoPath)
-        .input(tempAudioPath)
-        .outputOptions([
-          '-c:v copy', // 复制视频流（输入视频应该已经是9:16，因为拼接时已设置为720x1280）
-          '-c:a aac', // 重新编码音频为AAC
-          '-shortest' // 以较短的流为准
+        .input(coverImagePath)
+        .inputOptions([
+          '-loop', '1',
+          '-t', audioDurationSeconds.toString()
         ])
-        .output(tempOutputPath)
+        .complexFilter([
+          // 缩放封面图到目标尺寸（保持宽高比，居中）
+          `[0:v]scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=decrease,pad=${videoWidth}:${videoHeight}:(ow-iw)/2:(oh-ih)/2:black[out]`
+        ])
+        .outputOptions([
+          '-map', '[out]',
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-r', fps.toString(),
+          '-t', audioDurationSeconds.toString()
+        ])
+        .output(tempVideoPath)
+        .on('start', (commandLine) => {
+          console.log('🎬 FFmpeg视频生成命令:', commandLine);
+          timeoutId = setTimeout(() => {
+            console.error('❌ 视频生成超时（5分钟）');
+            ffmpegProcess.kill('SIGKILL');
+            reject(new Error('视频生成超时，请重试'));
+          }, timeout);
+        })
+        .on('end', () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          console.log('✅ 视频生成完成');
+          resolve(null);
+        })
+        .on('error', (err) => {
+          if (timeoutId) clearTimeout(timeoutId);
+          console.error('❌ FFmpeg视频生成失败:', err);
+          reject(err);
+        })
+        .on('stderr', (stderrLine) => {
+          // 输出ffmpeg的进度信息
+          if (stderrLine.includes('time=')) {
+            console.log('📊 FFmpeg进度:', stderrLine.trim());
+          }
+        })
+        .run();
+    });
+    
+    // 合并视频和音频（如果有字幕则嵌入字幕）
+    tempOutputPath = path.join(tempDir, `output_${contentId}_${language}_${timestamp}.mp4`);
+    console.log('🎞️ 开始合并视频和音频' + (tempSubtitlePath ? '（包含字幕）' : ''));
+    
+    await new Promise((resolve, reject) => {
+      let timeoutId = null;
+      const timeout = 300000; // 5分钟超时
+      
+      let ffmpegProcess = ffmpeg()
+        .input(tempVideoPath)
+        .input(tempAudioPath);
+      
+      // 如果有字幕文件，添加字幕滤镜
+      if (tempSubtitlePath) {
+        console.log('📝 添加字幕到视频:', tempSubtitlePath);
+        ffmpegProcess = ffmpegProcess
+          .complexFilter([
+            // 缩放视频
+            `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
+            // 添加字幕（硬字幕，烧录到视频帧上）
+            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+          ])
+          .outputOptions([
+            '-map', '[outv]',
+            '-map', '1:a',  // 映射音频流（第二个输入文件的音频）
+            '-c:v libx264',
+            '-preset medium',
+            '-crf 23',
+            '-pix_fmt yuv420p',
+            '-c:a aac',
+            '-b:a 128k',
+            '-shortest'
+          ]);
+      } else {
+        ffmpegProcess = ffmpegProcess.outputOptions([
+          '-c:v copy',
+          '-c:a aac',
+          '-shortest'
+        ]);
+      }
+      
+      ffmpegProcess = ffmpegProcess.output(tempOutputPath)
         .on('start', (commandLine) => {
           console.log('🎬 FFmpeg合并命令:', commandLine);
           timeoutId = setTimeout(() => {
@@ -2230,10 +3578,29 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
           // 如果copy失败，尝试重新编码
           if (err.message && err.message.includes('copy')) {
             console.log('⚠️ 视频流复制失败，尝试重新编码...');
-            const fallbackProcess = ffmpeg()
+            let fallbackProcess = ffmpeg()
               .input(tempVideoPath)
-              .input(tempAudioPath)
-              .outputOptions([
+              .input(tempAudioPath);
+            
+            // 如果有字幕，添加字幕滤镜
+            if (tempSubtitlePath) {
+              fallbackProcess = fallbackProcess
+                .complexFilter([
+                  `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
+                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+                ])
+                .outputOptions([
+                  '-map', '[outv]',
+                  '-map', '1:a',  // 映射音频流（第二个输入文件的音频）
+                  '-c:v libx264',
+                  '-preset ultrafast',
+                  '-crf 23',
+                  '-pix_fmt yuv420p',
+                  '-c:a aac',
+                  '-shortest'
+                ]);
+            } else {
+              fallbackProcess = fallbackProcess.outputOptions([
                 '-c:v libx264',
                 '-preset ultrafast',
                 '-crf 23',
@@ -2242,8 +3609,10 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
                 '-aspect 9:16', // 设置宽高比
                 '-c:a aac',
                 '-shortest'
-              ])
-              .output(tempOutputPath)
+              ]);
+            }
+            
+            fallbackProcess = fallbackProcess.output(tempOutputPath)
               .on('end', () => {
                 console.log('✅ 视频合并完成（使用重新编码）');
                 resolve(null);
@@ -2276,8 +3645,8 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     contentObj.set('videoStatus', 'completed');
     await contentObj.save();
     
-    // 清理临时文件
-    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath].filter(Boolean);
+    // 清理临时文件（包括字幕文件）
+    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath, tempSubtitlePath].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
         await fs.unlink(filePath);
@@ -2286,13 +3655,32 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       }
     }
     
+    // 清理视频帧目录
+    try {
+      const framesFiles = await fs.readdir(framesDir);
+      for (const file of framesFiles) {
+        await fs.unlink(path.join(framesDir, file));
+      }
+      await fs.rmdir(framesDir);
+    } catch (cleanupError) {
+      console.warn('⚠️ 清理视频帧目录失败:', cleanupError.message);
+    }
+    
+    // 根据语言返回相应的字段
+    const responseData = {
+      contentId: contentId,
+      language: language
+    };
+    
+    if (language === 'en') {
+      responseData.videoUrlEn = finalVideoUrl;
+    } else {
+      responseData.videoUrl = finalVideoUrl;
+    }
+    
     res.json({
       success: true,
-      data: {
-        videoUrl: finalVideoUrl,
-        contentId: contentId,
-        language: language
-      }
+      data: responseData
     });
   } catch (error) {
     console.error('❌ 生成视频失败:', error);
@@ -2302,8 +3690,8 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     console.error('❌ AudioUrl:', req.body.audioUrl);
     console.error('❌ Language:', req.body.language);
     
-    // 清理临时文件
-    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath].filter(Boolean);
+    // 清理临时文件（包括字幕文件）
+    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath, tempSubtitlePath].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
         await fs.unlink(filePath);
@@ -3065,9 +4453,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
-  let finalVideoPath = null; // 最终使用的视频路径（可能是原始视频或拼接后的视频）
-  let concatenatedVideoPath = null; // 拼接后的视频路径
-  let concatListPath = null; // concat列表文件路径
+  let tempSubtitlePath = null;
   
   try {
     const { contentId } = req.params;
@@ -3084,12 +4470,28 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       });
     }
     
-    // 检查是否有无声视频
-    const silentVideoUrl = contentObj.get('silentVideoUrl');
-    if (!silentVideoUrl) {
+    // 获取书籍信息以获取博客封面图
+    const bookId = contentObj.get('book')?.id || contentObj.get('bookId');
+    if (!bookId) {
       return res.status(400).json({
         success: false,
-        message: '请先生成无声视频（步骤2）'
+        message: '内容未关联到书籍'
+      });
+    }
+    
+    const book = await new AV.Query('Book').get(bookId);
+    if (!book) {
+      return res.status(404).json({
+        success: false,
+        message: '书籍不存在'
+      });
+    }
+    
+    const blogCoverUrl = book.get('blogCoverUrl');
+    if (!blogCoverUrl) {
+      return res.status(400).json({
+        success: false,
+        message: '请先生成博客封面图'
       });
     }
     
@@ -3198,9 +4600,53 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     // 步骤1: 使用腾讯云TTS生成英文音频
     console.log('🎵 步骤1: 使用腾讯云TTS生成英文音频...');
-    let audioText = `${chapterTitleEn}. ${summaryEn}`.trim();
-    console.log('📝 英文文本:', audioText.substring(0, 100) + '...');
-    console.log('📝 文本长度:', audioText.length, '字符');
+    
+    // 获取集数信息，用于生成开场白
+    const segmentIndexEn = contentObj.get('segmentIndex') || 0;
+    const bookObjEn = contentObj.get('book');
+    const bookTitleEn = bookObjEn ? (await bookObjEn.fetch()).get('title') : '';
+    
+    // 查询同一本书的所有内容段，获取总集数
+    let totalSegmentsEn = 0;
+    if (bookObjEn) {
+      const allSegmentsEn = await new AV.Query('ExtractedContent')
+        .equalTo('book', bookObjEn)
+        .ascending('segmentIndex')
+        .find();
+      totalSegmentsEn = allSegmentsEn.length;
+    }
+    
+    // 根据集数生成英文开场白
+    let openingTextEn = '';
+    if (segmentIndexEn === 1 || totalSegmentsEn === 0) {
+      // 第一集
+      openingTextEn = bookTitleEn 
+        ? `Hello, welcome to our book blog. Today we're starting with a book called "${bookTitleEn}". `
+        : `Hello, welcome to our book blog. Today we're starting with a new book. `;
+    } else if (segmentIndexEn === totalSegmentsEn && totalSegmentsEn > 0) {
+      // 最后一集
+      openingTextEn = bookTitleEn
+        ? `Hello, this is the final episode of the "${bookTitleEn}" breakdown series. `
+        : `Hello, this is the final episode of our book breakdown series. `;
+    } else {
+      // 中间集 - 随机选择一种开场白
+      const middleOpeningsEn = [
+        `Welcome back. In the previous episode, we discussed `,
+        `Hello, this is the book blog. `,
+        `Welcome back to our book blog. `
+      ];
+      openingTextEn = middleOpeningsEn[segmentIndexEn % middleOpeningsEn.length];
+    }
+    
+    // 在文本前添加开场白
+    let audioText = `${summaryEn}`.trim();
+    const finalAudioText = openingTextEn ? `${openingTextEn}${audioText}` : audioText;
+    console.log(`📝 添加英文开场白，集数: ${segmentIndexEn}/${totalSegmentsEn}`);
+    console.log(`📝 开场白: ${openingTextEn}`);
+    console.log('📝 英文文本:', finalAudioText.substring(0, 100) + '...');
+    console.log('📝 文本长度:', finalAudioText.length, '字符');
+    
+    audioText = finalAudioText;
     
     // 腾讯云长文本语音合成API（CreateTtsTask）支持最多5000字符
     // 使用精品模型（大模型音色），支持中英文长文本合成
@@ -3366,27 +4812,14 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     // 更新内容对象
     contentObj.set('audioUrlEn', englishAudioUrl);
+    contentObj.set('videoStatus', 'generating');
     await contentObj.save();
     
-    // 步骤2: 合并无声视频和英文音频
-    console.log('🎞️ 步骤2: 合并无声视频和英文音频...');
+    // 步骤2: 使用博客封面图生成英文视频（与中文视频逻辑相同）
+    console.log('🎞️ 步骤2: 使用博客封面图生成英文视频...');
     
     const tempDir = os.tmpdir();
     const timestamp = Date.now();
-    
-    // 下载无声视频
-    let finalSilentVideoUrl = silentVideoUrl;
-    if (finalSilentVideoUrl.startsWith('http://')) {
-      finalSilentVideoUrl = finalSilentVideoUrl.replace('http://', 'https://');
-    }
-    tempVideoPath = path.join(tempDir, `silent_video_${contentId}_${timestamp}.mp4`);
-    const videoResponse = await fetch(finalSilentVideoUrl);
-    if (!videoResponse.ok) {
-      throw new Error(`下载无声视频失败: ${videoResponse.statusText}`);
-    }
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    await fs.writeFile(tempVideoPath, videoBuffer);
-    console.log('✅ 无声视频下载完成');
     
     // 下载英文音频
     let finalEnglishAudioUrl = englishAudioUrl;
@@ -3394,29 +4827,33 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       finalEnglishAudioUrl = finalEnglishAudioUrl.replace('http://', 'https://');
     }
     tempAudioPath = path.join(tempDir, `audio_en_${contentId}_${timestamp}.mp3`);
-    const audioResponse = await fetch(finalEnglishAudioUrl);
-    if (!audioResponse.ok) {
-      throw new Error(`下载英文音频失败: ${audioResponse.statusText}`);
-    }
-    const audioBuffer2 = Buffer.from(await audioResponse.arrayBuffer());
-    await fs.writeFile(tempAudioPath, audioBuffer2);
-    console.log('✅ 英文音频下载完成');
+    console.log('📥 开始下载英文音频:', finalEnglishAudioUrl);
     
-    // 获取视频和音频时长，判断是否需要重复拼接视频
-    console.log('📊 检查视频和音频时长...');
-    const videoDuration = await new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(tempVideoPath, (err, metadata) => {
-        if (err) {
-          console.error('❌ 获取视频时长失败:', err);
-          reject(err);
-        } else {
-          const duration = metadata.format.duration || 0;
-          console.log('📹 中文视频时长:', duration, '秒');
-          resolve(duration);
-        }
+    let audioResponse;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      audioResponse = await fetch(finalEnglishAudioUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: controller.signal
       });
-    });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      throw new Error(`下载英文音频失败: ${fetchError.message}`);
+    }
     
+    if (!audioResponse.ok) {
+      throw new Error(`下载英文音频失败 (${audioResponse.status}): ${audioResponse.statusText}`);
+    }
+    
+    const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+    await fs.writeFile(tempAudioPath, audioBuffer);
+    console.log('✅ 英文音频下载完成，大小:', audioBuffer.length, 'bytes');
+    
+    // 获取音频时长
     const audioDuration = await new Promise((resolve, reject) => {
       ffmpeg.ffprobe(tempAudioPath, (err, metadata) => {
         if (err) {
@@ -3424,23 +4861,120 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
           reject(err);
         } else {
           const duration = metadata.format.duration || 0;
-          const durationMinutes = Math.floor(duration / 60);
-          const durationSeconds = Math.floor(duration % 60);
-          console.log('🎵 英文音频时长:', duration, '秒', `(${durationMinutes}分${durationSeconds}秒)`);
-          console.log('🎵 英文音频详细信息:', JSON.stringify({
-            duration: duration,
-            durationFormatted: `${durationMinutes}分${durationSeconds}秒`,
-            durationSeconds: Math.ceil(duration),
-            bitrate: metadata.format.bit_rate,
-            size: metadata.format.size,
-            format: metadata.format.format_name
-          }, null, 2));
+          console.log('✅ 英文音频时长:', duration, '秒');
           resolve(duration);
         }
       });
     });
     
-    // 确保视频时长 >= 音频时长，如果不足则重复拼接视频
+    const audioDurationSeconds = Math.ceil(audioDuration);
+    console.log('📊 英文音频总时长:', audioDurationSeconds, '秒');
+    
+    // 使用腾讯云ASR生成英文字幕文件（基于音频URL）
+    // 确保音频URL是HTTPS格式
+    let audioUrlForASR = finalEnglishAudioUrl;
+    if (audioUrlForASR.startsWith('http://')) {
+      audioUrlForASR = audioUrlForASR.replace('http://', 'https://');
+    }
+    
+    console.log('🎤 使用英文音频URL生成字幕:', audioUrlForASR);
+    tempSubtitlePath = await generateSubtitleFile(
+      audioUrlForASR,
+      'en',
+      tempDir,
+      contentId,
+      timestamp
+    );
+    
+    // 下载博客封面图
+    console.log('📥 开始下载博客封面图:', blogCoverUrl);
+    let coverImageResponse;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      coverImageResponse = await fetch(blogCoverUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      throw new Error(`下载博客封面图失败: ${fetchError.message}`);
+    }
+    
+    if (!coverImageResponse.ok) {
+      throw new Error(`下载博客封面图失败 (${coverImageResponse.status}): ${coverImageResponse.statusText}`);
+    }
+    
+    const coverImageBuffer = Buffer.from(await coverImageResponse.arrayBuffer());
+    const coverImagePath = path.join(tempDir, `cover_en_${contentId}_${timestamp}.jpg`);
+    await fs.writeFile(coverImagePath, coverImageBuffer);
+    console.log('✅ 博客封面图保存完成');
+    
+    // 视频参数（9:16比例，720x1280）
+    const videoWidth = 720;
+    const videoHeight = 1280;
+    const fps = 30;
+    
+    // 使用ffmpeg将博客封面图转换为视频（静态图片，匹配音频时长）
+    tempVideoPath = path.join(tempDir, `video_en_${contentId}_${timestamp}.mp4`);
+    console.log('🎞️ 开始生成英文视频（使用博客封面图）');
+    
+    await new Promise((resolve, reject) => {
+      let timeoutId = null;
+      const timeout = 300000; // 5分钟超时
+      
+      // 使用ffmpeg将封面图转换为视频（循环播放以匹配音频时长）
+      const ffmpegProcess = ffmpeg()
+        .input(coverImagePath)
+        .inputOptions([
+          '-loop', '1',
+          '-t', audioDurationSeconds.toString()
+        ])
+        .complexFilter([
+          // 缩放封面图到目标尺寸（保持宽高比，居中）
+          `[0:v]scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=decrease,pad=${videoWidth}:${videoHeight}:(ow-iw)/2:(oh-ih)/2:black[out]`
+        ])
+        .outputOptions([
+          '-map', '[out]',
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-r', fps.toString(),
+          '-t', audioDurationSeconds.toString()
+        ])
+        .output(tempVideoPath)
+        .on('start', (commandLine) => {
+          console.log('🎬 FFmpeg视频生成命令:', commandLine);
+          timeoutId = setTimeout(() => {
+            console.error('❌ 视频生成超时（5分钟）');
+            ffmpegProcess.kill('SIGKILL');
+            reject(new Error('视频生成超时，请重试'));
+          }, timeout);
+        })
+        .on('end', () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          console.log('✅ 视频生成完成');
+          resolve(null);
+        })
+        .on('error', (err) => {
+          if (timeoutId) clearTimeout(timeoutId);
+          console.error('❌ FFmpeg视频生成失败:', err);
+          reject(err);
+        })
+        .on('stderr', (stderrLine) => {
+          if (stderrLine.includes('time=')) {
+            console.log('📊 FFmpeg进度:', stderrLine.trim());
+          }
+        })
+        .run();
+    });
+    
+    // 合并视频和音频
+    tempOutputPath = path.join(tempDir, `output_en_${contentId}_${timestamp}.mp4`);
+    console.log('🎞️ 开始合并视频和音频');
+    
     let finalVideoPath = tempVideoPath;
     // 使用更严格的比较，考虑浮点数误差，如果视频时长 < 音频时长（即使只差0.1秒），也需要拼接
     if (videoDuration < audioDuration) {
@@ -3609,160 +5143,48 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       console.log('✅ 视频时长足够，无需重复拼接');
     }
     
-    // 合并视频和音频
+    // 合并视频和音频（如果有字幕则嵌入字幕）
     tempOutputPath = path.join(tempDir, `output_en_${contentId}_${timestamp}.mp4`);
-    console.log('🎞️ 开始合并视频和音频');
-    console.log(`📊 最终视频路径: ${finalVideoPath}`);
-    console.log(`📊 音频路径: ${tempAudioPath}`);
-    
-    // 再次验证最终视频时长，确保 >= 音频时长，如果不足则继续拼接
-    let finalVideoDurationCheck = await new Promise((resolve) => {
-      ffmpeg.ffprobe(finalVideoPath, (err, metadata) => {
-        if (err) {
-          console.warn('⚠️ 获取最终视频时长失败:', err.message);
-          resolve(null);
-        } else {
-          const duration = metadata.format.duration || 0;
-          console.log('📹 最终视频时长（合并前）:', duration, '秒');
-          resolve(duration);
-        }
-      });
-    });
-    
-    // 如果视频时长不足，继续拼接直到满足要求
-    while (finalVideoDurationCheck !== null && finalVideoDurationCheck < audioDuration) {
-      console.log(`⚠️ 最终视频时长(${finalVideoDurationCheck}秒) < 音频时长(${audioDuration}秒)，继续拼接视频...`);
-      const additionalDurationNeeded = audioDuration - finalVideoDurationCheck;
-      const additionalRepeatCount = Math.ceil((additionalDurationNeeded * 1.1) / videoDuration) + 1; // 多拼接一些，确保足够
-      console.log(`🔄 需要额外重复 ${additionalRepeatCount} 次视频`);
-      
-      // 创建新的concat列表，包含已拼接的视频和额外的重复
-      const additionalConcatListPath = path.join(tempDir, `concat_list_additional_${contentId}_${timestamp}_${Date.now()}.txt`);
-      const additionalConcatContent = [
-        `file '${finalVideoPath.replace(/'/g, "\\'")}'`, // 先包含已拼接的视频
-        ...Array(additionalRepeatCount).fill(`file '${tempVideoPath.replace(/'/g, "\\'")}'`) // 再添加额外的重复
-      ].join('\n');
-      await fs.writeFile(additionalConcatListPath, additionalConcatContent);
-      console.log('📝 创建额外拼接列表文件:', additionalConcatListPath);
-      
-      // 再次拼接
-      const newConcatenatedVideoPath = path.join(tempDir, `concatenated_video_${contentId}_${timestamp}_${Date.now()}.mp4`);
-      await new Promise((resolve, reject) => {
-        let timeoutId = null;
-        const timeout = 300000;
-        
-        const additionalConcatProcess = ffmpeg()
-          .input(additionalConcatListPath)
-          .inputOptions(['-f', 'concat', '-safe', '0'])
-          .outputOptions([
-            '-c:v copy',
-            '-c:a copy'
-          ])
-          .output(newConcatenatedVideoPath)
-          .on('start', (commandLine) => {
-            console.log('🎬 FFmpeg额外拼接命令:', commandLine);
-            timeoutId = setTimeout(() => {
-              console.error('❌ 额外视频拼接超时（5分钟）');
-              additionalConcatProcess.kill('SIGKILL');
-              reject(new Error('额外视频拼接超时，请重试'));
-            }, timeout);
-          })
-          .on('end', () => {
-            if (timeoutId) clearTimeout(timeoutId);
-            console.log('✅ 额外视频拼接完成');
-            resolve(null);
-          })
-          .on('error', (err) => {
-            if (timeoutId) clearTimeout(timeoutId);
-            console.error('❌ FFmpeg额外拼接失败:', err);
-            // 如果copy失败，尝试重新编码
-            if (err.message && err.message.includes('copy')) {
-              console.log('⚠️ 视频流复制失败，尝试重新编码拼接...');
-              const fallbackConcatProcess = ffmpeg()
-                .input(additionalConcatListPath)
-                .inputOptions(['-f', 'concat', '-safe', '0'])
-                .outputOptions([
-                  '-c:v libx264',
-                  '-preset ultrafast',
-                  '-crf 23',
-                  '-pix_fmt yuv420p',
-                  '-s 720x1280',
-                  '-aspect 9:16'
-                ])
-                .output(newConcatenatedVideoPath)
-                .on('end', () => {
-                  console.log('✅ 视频拼接完成（使用重新编码）');
-                  resolve(null);
-                })
-                .on('error', (fallbackErr) => {
-                  console.error('❌ 重新编码拼接也失败:', fallbackErr);
-                  reject(fallbackErr);
-                })
-                .run();
-            } else {
-              reject(err);
-            }
-          })
-          .run();
-      });
-      
-      // 清理旧的视频文件（保留原始视频）
-      if (finalVideoPath !== tempVideoPath && finalVideoPath !== concatenatedVideoPath) {
-        try {
-          await fs.unlink(finalVideoPath);
-        } catch (e) {
-          console.warn('⚠️ 清理旧视频文件失败:', e.message);
-        }
-      }
-      if (concatListPath && concatListPath !== additionalConcatListPath) {
-        try {
-          await fs.unlink(concatListPath);
-        } catch (e) {
-          console.warn('⚠️ 清理旧concat列表文件失败:', e.message);
-        }
-      }
-      
-      // 更新路径
-      finalVideoPath = newConcatenatedVideoPath;
-      concatListPath = additionalConcatListPath;
-      if (concatenatedVideoPath && concatenatedVideoPath !== newConcatenatedVideoPath) {
-        concatenatedVideoPath = newConcatenatedVideoPath;
-      }
-      
-      // 重新检查视频时长
-      finalVideoDurationCheck = await new Promise((resolve) => {
-        ffmpeg.ffprobe(finalVideoPath, (err, metadata) => {
-          if (err) {
-            console.warn('⚠️ 获取拼接后视频时长失败:', err.message);
-            resolve(null);
-          } else {
-            const duration = metadata.format.duration || 0;
-            console.log('📹 拼接后视频时长:', duration, '秒');
-            resolve(duration);
-          }
-        });
-      });
-    }
-    
-    if (finalVideoDurationCheck === null) {
-      console.warn('⚠️ 无法获取最终视频时长，继续合并（可能存在问题）');
-    } else {
-      console.log(`✅ 视频时长(${finalVideoDurationCheck}秒) >= 音频时长(${audioDuration}秒)，可以合并`);
-    }
+    console.log('🎞️ 开始合并视频和音频' + (tempSubtitlePath ? '（包含字幕）' : ''));
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
       const timeout = 300000; // 5分钟超时
       
-      const ffmpegProcess = ffmpeg()
-        .input(finalVideoPath)
-        .input(tempAudioPath)
-        .outputOptions([
-          '-c:v copy', // 复制视频流（输入视频应该已经是9:16）
+      let ffmpegProcess = ffmpeg()
+        .input(finalVideoPath) // 使用finalVideoPath（可能已拼接）
+        .input(tempAudioPath);
+      
+      // 如果有字幕文件，添加字幕滤镜
+      if (tempSubtitlePath) {
+        console.log('📝 添加字幕到视频:', tempSubtitlePath);
+        ffmpegProcess = ffmpegProcess
+          .complexFilter([
+            // 缩放视频
+            `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
+            // 添加字幕（硬字幕，烧录到视频帧上）
+            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+          ])
+          .outputOptions([
+            '-map', '[outv]',
+            '-map', '1:a',  // 映射音频流（第二个输入文件的音频）
+            '-c:v libx264',
+            '-preset medium',
+            '-crf 23',
+            '-pix_fmt yuv420p',
+            '-c:a aac',
+            '-b:a 128k',
+            '-shortest'
+          ]);
+      } else {
+        ffmpegProcess = ffmpegProcess.outputOptions([
+          '-c:v copy',
           '-c:a aac',
-          '-t', audioDuration.toString() // 明确指定输出时长为音频时长（秒）
-        ])
-        .output(tempOutputPath)
+          '-shortest'
+        ]);
+      }
+      
+      ffmpegProcess = ffmpegProcess.output(tempOutputPath)
         .on('start', (commandLine) => {
           console.log('🎬 FFmpeg合并命令:', commandLine);
           timeoutId = setTimeout(() => {
@@ -3782,20 +5204,41 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
           // 如果copy失败，尝试重新编码
           if (err.message && err.message.includes('copy')) {
             console.log('⚠️ 视频流复制失败，尝试重新编码...');
-            const fallbackProcess = ffmpeg()
+            let fallbackProcess = ffmpeg()
               .input(finalVideoPath)
-              .input(tempAudioPath)
-              .outputOptions([
+              .input(tempAudioPath);
+            
+            // 如果有字幕，添加字幕滤镜
+            if (tempSubtitlePath) {
+              fallbackProcess = fallbackProcess
+                .complexFilter([
+                  `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
+                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+                ])
+                .outputOptions([
+                  '-map', '[outv]',
+                  '-map', '1:a',  // 映射音频流（第二个输入文件的音频）
+                  '-c:v libx264',
+                  '-preset ultrafast',
+                  '-crf 23',
+                  '-pix_fmt yuv420p',
+                  '-c:a aac',
+                  '-shortest'
+                ]);
+            } else {
+              fallbackProcess = fallbackProcess.outputOptions([
                 '-c:v libx264',
                 '-preset ultrafast',
                 '-crf 23',
                 '-pix_fmt yuv420p',
-                '-s 720x1280', // 强制9:16竖屏分辨率
-                '-aspect 9:16', // 设置宽高比
+                '-s 720x1280',
+                '-aspect 9:16',
                 '-c:a aac',
-                '-t', audioDuration.toString() // 明确指定输出时长为音频时长（秒）
-              ])
-              .output(tempOutputPath)
+                '-shortest'
+              ]);
+            }
+            
+            fallbackProcess = fallbackProcess.output(tempOutputPath)
               .on('end', () => {
                 console.log('✅ 视频合并完成（使用重新编码）');
                 resolve(null);
@@ -3845,14 +5288,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     contentObj.set('videoStatus', 'completed');
     await contentObj.save();
     
-    // 清理临时文件
-    const cleanupFiles = [
-      tempVideoPath, 
-      tempAudioPath, 
-      tempOutputPath,
-      concatenatedVideoPath, // 拼接后的视频
-      concatListPath // concat列表文件
-    ].filter(Boolean);
+    // 清理临时文件（包括字幕文件）
+    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath, tempSubtitlePath].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
         await fs.unlink(filePath);
@@ -3863,27 +5300,6 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     console.log('✅ 英文视频生成完成');
     
-    // 获取最终视频时长用于返回（在清理临时文件之前）
-    let finalVideoDuration = null;
-    try {
-      finalVideoDuration = await new Promise((resolve) => {
-        ffmpeg.ffprobe(tempOutputPath, (err, metadata) => {
-          if (err) {
-            console.warn('⚠️ 获取最终视频时长失败:', err.message);
-            resolve(null);
-          } else {
-            const duration = metadata.format.duration || 0;
-            const durationMinutes = Math.floor(duration / 60);
-            const durationSeconds = Math.floor(duration % 60);
-            console.log('📹 最终英文视频时长:', duration, '秒', `(${durationMinutes}分${durationSeconds}秒)`);
-            resolve(duration);
-          }
-        });
-      });
-    } catch (err) {
-      console.warn('⚠️ 获取最终视频时长异常:', err.message);
-    }
-    
     res.json({
       success: true,
       data: {
@@ -3891,16 +5307,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
         audioUrlEn: englishAudioUrl,
         chapterTitleEn: chapterTitleEn,
         summaryEn: summaryEn,
-        audioDuration: {
-          seconds: Math.ceil(audioDuration),
-          formatted: `${Math.floor(audioDuration / 60)}分${Math.floor(audioDuration % 60)}秒`,
-          exact: parseFloat(audioDuration.toFixed(2))
-        },
-        videoDuration: finalVideoDuration ? {
-          seconds: Math.ceil(finalVideoDuration),
-          formatted: `${Math.floor(finalVideoDuration / 60)}分${Math.floor(finalVideoDuration % 60)}秒`,
-          exact: parseFloat(finalVideoDuration.toFixed(2))
-        } : null
+        contentId: contentId,
+        language: 'en'
       }
     });
     
@@ -3908,14 +5316,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.error('❌ 生成英文视频失败:', error);
     console.error('❌ 错误堆栈:', error.stack);
     
-    // 清理临时文件
-    const cleanupFiles = [
-      tempVideoPath, 
-      tempAudioPath, 
-      tempOutputPath,
-      concatenatedVideoPath, // 拼接后的视频
-      concatListPath // concat列表文件
-    ].filter(Boolean);
+    // 清理临时文件（包括字幕文件）
+    const cleanupFiles = [tempVideoPath, tempAudioPath, tempOutputPath, tempSubtitlePath].filter(Boolean);
     for (const filePath of cleanupFiles) {
       try {
         await fs.unlink(filePath);
@@ -3924,11 +5326,25 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       }
     }
     
-    res.status(500).json({
-      success: false,
-      message: `生成英文视频失败: ${error.message}`,
-      error: error.message
-    });
+    // 如果响应还没有发送，发送错误响应
+    if (!res.headersSent) {
+      // 更新状态为失败
+      try {
+        const content = await new AV.Query('ExtractedContent').get(contentId);
+        if (content) {
+          content.set('videoStatus', 'failed');
+          await content.save();
+        }
+      } catch (updateError) {
+        console.error('❌ 更新内容状态失败:', updateError);
+      }
+
+      res.status(500).json({
+        success: false,
+        message: `生成英文视频失败: ${error.message}`,
+        error: error.message
+      });
+    }
   }
 });
 

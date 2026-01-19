@@ -63,6 +63,21 @@ export function BookManagement() {
   const [pendingVideos, setPendingVideos] = useState<Video[]>([]); // 待审核视频列表
   const [publishedVideos, setPublishedVideos] = useState<Video[]>([]); // 已发布视频列表
   const [videoStyleDescription, setVideoStyleDescription] = useState<string>('Anime style, vibrant colors'); // Video style description (shared by all content)
+  const [generatingBlogCover, setGeneratingBlogCover] = useState<boolean>(false);
+  const [blogCoverUrl, setBlogCoverUrl] = useState<string | null>(null);
+  const [blogCoverPrompts, setBlogCoverPrompts] = useState<{
+    style1: string;
+    style2: string;
+    style3: string;
+  } | null>(null);
+  const [selectedPromptStyle, setSelectedPromptStyle] = useState<'style1' | 'style2' | 'style3' | null>(null);
+  const [editedPrompts, setEditedPrompts] = useState<{
+    style1: string;
+    style2: string;
+    style3: string;
+  } | null>(null);
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState<boolean>(false);
+  const [generatingPrompts, setGeneratingPrompts] = useState<boolean>(false);
 
   // 加载数据
   useEffect(() => {
@@ -269,8 +284,8 @@ export function BookManagement() {
       setGeneratingAudioLanguage(language);
       
       const audioText = language === 'zh' 
-        ? `${content.chapterTitle || ''}。${content.summary || ''}`.trim()
-        : `${content.chapterTitleEn || ''}. ${content.summaryEn || ''}`.trim();
+        ? `${content.summary || ''}`.trim()
+        : `${content.summaryEn || ''}`.trim();
       
       if (!audioText) {
         toast.error(`Content text is empty, cannot generate ${language === 'zh' ? 'Chinese' : 'English'} audio`);
@@ -418,7 +433,7 @@ export function BookManagement() {
         setVideoProgress(prev => ({ ...prev, [progressKey]: 5 }));
         toast.info('Step 1/3: Generating Chinese audio...');
         
-        const audioText = `${content.chapterTitle || ''}。${content.summary || ''}`.trim();
+        const audioText = `${content.summary || ''}`.trim();
         if (!audioText) {
           throw new Error('内容文本为空，无法生成中文音频');
         }
@@ -449,57 +464,15 @@ export function BookManagement() {
         toast.info('Step 1 skipped: Chinese audio already exists');
       }
       
-      // 步骤2: 生成无声视频（如果还没有，或者需要重新生成）
-      if (!content.silentVideoUrl || isRegenerate) {
-        setVideoProgress(prev => ({ ...prev, [progressKey]: 35 }));
-        toast.info('Step 2/3: Generating silent video, this may take a few minutes...');
-        
-        setGeneratingSilentVideoId(content.id);
-        
-        // 启动进度条更新（增加预计时间，因为现在需要上传更大的视频文件）
-        const startTime = Date.now();
-        const estimatedDuration = 300000; // 预计5分钟（包括上传时间）
-        
-        progressInterval = setInterval(() => {
-          const elapsed = Date.now() - startTime;
-          // 进度从33%到66%，但实际可能需要更长时间
-          const progress = Math.min(65, 33 + Math.floor((elapsed / estimatedDuration) * 32));
-          setVideoProgress(prev => ({ ...prev, [progressKey]: progress }));
-        }, 1000);
-        
-        setVideoProgressInterval(prev => ({ ...prev, [progressKey]: progressInterval! }));
-        
-        const silentVideoResult = await bookAPI.generateSilentVideo(content.id, videoStyleDescription || undefined);
-        
-        if (progressInterval) {
-          clearInterval(progressInterval);
-          progressInterval = null;
-        }
-        
-        if (!silentVideoResult || !silentVideoResult.silentVideoUrl) {
-          throw new Error('生成无声视频失败');
-        }
-        
-        setVideoProgress(prev => ({ ...prev, [progressKey]: 66 }));
-        toast.success('Step 2 completed: Silent video generated successfully');
-        
-        // 重新加载内容以获取最新的silentVideoUrl
-        if (selectedBook) {
-          await loadBookContents(selectedBook.id);
-        }
-        
-        // 等待一下确保数据已更新
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        setGeneratingSilentVideoId(null);
-      } else {
-        setVideoProgress(prev => ({ ...prev, [progressKey]: 66 }));
-        toast.info('Step 2 skipped: Video material already exists');
-      }
+      // 步骤2: 生成中文视频（使用博客封面图和话筒，合并音频）
+      setVideoProgress(prev => ({ ...prev, [progressKey]: 35 }));
+      toast.info('Step 2/2: Generating video with blog cover and microphone, this may take a few minutes...');
       
-      // 步骤3: 生成中文视频（合并无声视频和音频）
-      setVideoProgress(prev => ({ ...prev, [progressKey]: 68 }));
-      toast.info('Step 3/3: Merging video and audio, this may take a few minutes...');
+      // 检查是否有博客封面图（检查selectedBook和blogCoverUrl state）
+      const currentBlogCoverUrl = blogCoverUrl || selectedBook?.blogCoverUrl;
+      if (!currentBlogCoverUrl) {
+        throw new Error('Please generate blog cover image first');
+      }
       
       // 重新获取最新的content数据
       const updatedContents = await bookAPI.getBookContents(selectedBook!.id);
@@ -510,18 +483,6 @@ export function BookManagement() {
         throw new Error('无法找到更新的内容数据');
       }
       
-      console.log('📊 更新后的内容数据:', {
-        id: updatedContent.id,
-        silentVideoUrl: updatedContent.silentVideoUrl ? '存在' : '不存在',
-        audioUrl: updatedContent.audioUrl ? '存在' : '不存在',
-        silentVideoUrlPreview: updatedContent.silentVideoUrl?.substring(0, 50) + '...'
-      });
-      
-      if (!updatedContent.silentVideoUrl) {
-        console.error('❌ 无声视频URL不存在');
-        throw new Error('无声视频URL不存在，请先生成无声视频');
-      }
-      
       if (!updatedContent.audioUrl) {
         console.error('❌ 中文音频URL不存在');
         throw new Error('中文音频URL不存在，请先生成中文音频');
@@ -529,11 +490,11 @@ export function BookManagement() {
       
       // 启动进度条更新
       const startTime = Date.now();
-      const estimatedDuration = 120000; // 预计2分钟（合并操作）
+      const estimatedDuration = 180000; // 预计3分钟（生成视频）
       
       progressInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
-        const progress = Math.min(95, 68 + Math.floor((elapsed / estimatedDuration) * 27));
+        const progress = Math.min(95, 35 + Math.floor((elapsed / estimatedDuration) * 60));
         setVideoProgress(prev => ({ ...prev, [progressKey]: progress }));
       }, 1000);
       
@@ -552,7 +513,7 @@ export function BookManagement() {
       setVideoProgress(prev => ({ ...prev, [progressKey]: 100 }));
       
       if (videoResult && videoResult.videoUrl) {
-        toast.success('Step 3 completed: Chinese video generated successfully!');
+        toast.success('Step 2 completed: Chinese video generated successfully!');
         if (selectedBook) {
           await loadBookContents(selectedBook.id);
         }
@@ -687,15 +648,14 @@ export function BookManagement() {
         return;
       }
       
-      // 检查是否有无声视频
-      const contentsWithSilentVideo = contents.filter((c: any) => c.silentVideoUrl);
-      if (contentsWithSilentVideo.length === 0) {
-        toast.error('Please generate silent video first (Step 2)');
+      // 检查是否有博客封面图
+      if (!book.blogCoverUrl) {
+        toast.error('Please generate blog cover image first');
         return;
       }
       
       // 为每个内容添加bookId（用于后续重新加载）
-      const contentsWithBookId = contentsWithSilentVideo.map((c: any) => ({
+      const contentsWithBookId = contents.map((c: any) => ({
         ...c,
         bookId: book.id
       }));
@@ -1292,9 +1252,12 @@ export function BookManagement() {
                       size="sm"
                       variant="outline"
                         onClick={async () => {
-                        setSelectedBook(book);
+                        // 从最新的books列表中查找对应的书籍，确保使用最新的数据（包括blogCoverUrl）
+                        const latestBook = books.find(b => b.id === book.id) || book;
+                        setSelectedBook(latestBook);
                         setIsContentDialogOpen(true);
-                          await loadBookContents(book.id);
+                        setBlogCoverUrl(latestBook.blogCoverUrl || null);
+                          await loadBookContents(latestBook.id);
                       }}
                       className="hover:bg-accent hover:text-accent-foreground"
                     >
@@ -1360,6 +1323,286 @@ export function BookManagement() {
             </DialogDescription>
           </DialogHeader>
 
+          {/* 生成博客封面图区域 */}
+          <div className="mb-6 p-4 border rounded-lg bg-accent/5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-semibold mb-1">Blog Cover Image</h3>
+                <p className="text-sm text-muted-foreground">
+                  Generate a 9:16 book cover image based on book title and author
+                </p>
+              </div>
+              <Button
+                onClick={async () => {
+                  if (!selectedBook) return;
+                  try {
+                    // 如果已有提示词（包括编辑过的），直接打开对话框
+                    if (editedPrompts || blogCoverPrompts) {
+                      setIsPromptDialogOpen(true);
+                      return;
+                    }
+                    
+                    // 否则先生成提示词
+                    setIsPromptDialogOpen(true);
+                    setGeneratingPrompts(true);
+                    const promptsResult = await bookAPI.generateBlogCoverPrompts(selectedBook.id);
+                    if (promptsResult && promptsResult.prompts) {
+                      setBlogCoverPrompts(promptsResult.prompts);
+                      setEditedPrompts(null); // 重置编辑状态
+                    } else {
+                      throw new Error('Failed to generate prompts');
+                    }
+                  } catch (error: any) {
+                    console.error('生成提示词失败:', error);
+                    toast.error(error.message || 'Failed to generate prompts');
+                    setIsPromptDialogOpen(false);
+                  } finally {
+                    setGeneratingPrompts(false);
+                  }
+                }}
+                disabled={generatingBlogCover || generatingPrompts}
+                variant={blogCoverUrl || selectedBook?.blogCoverUrl ? "outline" : "default"}
+              >
+                {generatingBlogCover || generatingPrompts ? (
+                  <>
+                    <Loader className="mr-2 h-4 w-4 animate-spin" />
+                    {generatingPrompts ? 'Generating Prompts...' : 'Generating...'}
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    {blogCoverUrl || selectedBook?.blogCoverUrl ? 'Regenerate Cover' : 'Generate Cover'}
+                  </>
+                )}
+              </Button>
+            </div>
+            {(blogCoverUrl || selectedBook?.blogCoverUrl) && (
+              <div className="mt-3">
+                <img 
+                  src={blogCoverUrl || selectedBook?.blogCoverUrl || ''} 
+                  alt="Blog Cover" 
+                  className="w-full max-w-xs mx-auto rounded-lg border"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* 提示词选择对话框 */}
+          <Dialog open={isPromptDialogOpen} onOpenChange={(open) => {
+            setIsPromptDialogOpen(open);
+            if (!open) {
+              // 关闭对话框时，如果没有选择风格，重置选择状态
+              // 但保留提示词和编辑状态，以便下次打开时继续使用
+              if (!selectedPromptStyle) {
+                // 如果关闭时没有选择，保持提示词不变
+              }
+            }
+          }}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Select Cover Style and Prompt</DialogTitle>
+                <DialogDescription>
+                  Select a style, edit the prompt if needed, then click Apply to generate the cover image
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                {/* 如果还没有提示词，先生成 */}
+                {!blogCoverPrompts && !editedPrompts && (
+                  <div className="text-center py-8">
+                    <Loader className="mx-auto h-8 w-8 animate-spin mb-4" />
+                    <p className="text-muted-foreground">Generating prompts...</p>
+                  </div>
+                )}
+
+                {/* 显示3种风格的提示词 */}
+                {(editedPrompts || blogCoverPrompts) && (
+                  <div className="space-y-4">
+                    {/* Style 1: Modern Minimalist Style */}
+                    <div className={`p-4 border-2 rounded-lg transition-colors ${
+                      selectedPromptStyle === 'style1' 
+                        ? 'border-accent bg-accent/10' 
+                        : 'border-border hover:border-accent/50'
+                    }`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold mb-1">Style 1: Modern Minimalist Style</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Focuses on premium feel and professionalism, suitable for most knowledge blogs
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={selectedPromptStyle === 'style1' ? 'default' : 'outline'}
+                          onClick={() => setSelectedPromptStyle('style1')}
+                        >
+                          {selectedPromptStyle === 'style1' ? 'Selected' : 'Select'}
+                        </Button>
+                      </div>
+                      <Textarea
+                        value={editedPrompts?.style1 || blogCoverPrompts?.style1 || ''}
+                        onChange={(e) => {
+                          const currentPrompts = editedPrompts || blogCoverPrompts;
+                          if (currentPrompts) {
+                            setEditedPrompts({
+                              ...currentPrompts,
+                              style1: e.target.value
+                            });
+                          }
+                        }}
+                        className="min-h-[100px] font-mono text-sm"
+                        placeholder="Prompt..."
+                      />
+                    </div>
+
+                    {/* Style 2: Creative Expression Style */}
+                    <div className={`p-4 border-2 rounded-lg transition-colors ${
+                      selectedPromptStyle === 'style2' 
+                        ? 'border-accent bg-accent/10' 
+                        : 'border-border hover:border-accent/50'
+                    }`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold mb-1">Style 2: Creative Expression Style</h4>
+                          <p className="text-sm text-muted-foreground">
+                            More dynamic and creative, highlighting the concepts of "sharing" and "spreading"
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={selectedPromptStyle === 'style2' ? 'default' : 'outline'}
+                          onClick={() => setSelectedPromptStyle('style2')}
+                        >
+                          {selectedPromptStyle === 'style2' ? 'Selected' : 'Select'}
+                        </Button>
+                      </div>
+                      <Textarea
+                        value={editedPrompts?.style2 || blogCoverPrompts?.style2 || ''}
+                        onChange={(e) => {
+                          const currentPrompts = editedPrompts || blogCoverPrompts;
+                          if (currentPrompts) {
+                            setEditedPrompts({
+                              ...currentPrompts,
+                              style2: e.target.value
+                            });
+                          }
+                        }}
+                        className="min-h-[100px] font-mono text-sm"
+                        placeholder="Prompt..."
+                      />
+                    </div>
+
+                    {/* Style 3: Knowledge Stage Style */}
+                    <div className={`p-4 border-2 rounded-lg transition-colors ${
+                      selectedPromptStyle === 'style3' 
+                        ? 'border-accent bg-accent/10' 
+                        : 'border-border hover:border-accent/50'
+                    }`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold mb-1">Style 3: Knowledge Stage Style</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Places the book at the center of a "stage", creating a solemn and classic lecture or press conference atmosphere
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={selectedPromptStyle === 'style3' ? 'default' : 'outline'}
+                          onClick={() => setSelectedPromptStyle('style3')}
+                        >
+                          {selectedPromptStyle === 'style3' ? 'Selected' : 'Select'}
+                        </Button>
+                      </div>
+                      <Textarea
+                        value={editedPrompts?.style3 || blogCoverPrompts?.style3 || ''}
+                        onChange={(e) => {
+                          const currentPrompts = editedPrompts || blogCoverPrompts;
+                          if (currentPrompts) {
+                            setEditedPrompts({
+                              ...currentPrompts,
+                              style3: e.target.value
+                            });
+                          }
+                        }}
+                        className="min-h-[100px] font-mono text-sm"
+                        placeholder="Prompt..."
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 justify-end pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsPromptDialogOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (!selectedPromptStyle) {
+                            toast.error('Please select a style first');
+                            return;
+                          }
+                          
+                          const currentPrompts = editedPrompts || blogCoverPrompts;
+                          if (!currentPrompts) {
+                            toast.error('Prompts not found');
+                            return;
+                          }
+
+                          const selectedPrompt = currentPrompts[selectedPromptStyle];
+                          if (!selectedPrompt || !selectedPrompt.trim()) {
+                            toast.error('The selected style prompt is empty');
+                            return;
+                          }
+
+                          if (!selectedBook) return;
+
+                          try {
+                            setIsPromptDialogOpen(false);
+                            setGeneratingBlogCover(true);
+                            
+                            const result = await bookAPI.generateBlogCover(
+                              selectedBook.id,
+                              selectedPrompt
+                            );
+                            
+                            if (result && result.blogCoverUrl) {
+                              setBlogCoverUrl(result.blogCoverUrl);
+                              setSelectedBook({
+                                ...selectedBook,
+                                blogCoverUrl: result.blogCoverUrl
+                              });
+                              setBooks(prevBooks => 
+                                prevBooks.map(book => 
+                                  book.id === selectedBook.id 
+                                    ? { ...book, blogCoverUrl: result.blogCoverUrl }
+                                    : book
+                                )
+                              );
+                              toast.success('Blog cover image generated successfully!');
+                            } else {
+                              throw new Error('Failed to generate blog cover');
+                            }
+                          } catch (error: any) {
+                            console.error('生成博客封面图失败:', error);
+                            toast.error(error.message || 'Failed to generate blog cover image');
+                          } finally {
+                            setGeneratingBlogCover(false);
+                          }
+                        }}
+                        disabled={!selectedPromptStyle}
+                        className="bg-accent hover:bg-accent/90"
+                      >
+                        Apply & Generate
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {bookContents && bookContents.length > 0 ? (
             <div className="space-y-4 mt-4">
               {bookContents.map((content, index) => (
@@ -1408,30 +1651,10 @@ export function BookManagement() {
                       </div>
                     </div>
 
-                    {/* 生成中文视频按钮和结果展示 */}
+                    {/* 生成中文视频和英文视频按钮 */}
                     <div className="space-y-4">
+                      {/* 生成中文视频按钮 */}
                       <div className="border rounded-lg p-4">
-                        {/* Video Style Description Input */}
-                        <div className="mb-4">
-                          <Label htmlFor={`video-style-${content.id}`} className="text-sm font-medium mb-2 block">
-                            Video Style Description
-                          </Label>
-                          <Textarea
-                            id={`video-style-${content.id}`}
-                            placeholder="e.g., Anime style, vibrant colors"
-                            value={videoStyleDescription}
-                            onChange={(e) => setVideoStyleDescription(e.target.value)}
-                            className="min-h-[60px]"
-                            disabled={
-                              (generatingVideoId === content.id && generatingVideoLanguage === 'zh') ||
-                              (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ||
-                              generatingSilentVideoId === content.id
-                            }
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            This style description will be added to the video generation prompts
-                          </p>
-                        </div>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">Generate Chinese Video</span>
@@ -1439,25 +1662,24 @@ export function BookManagement() {
                               <CircleCheck className="h-4 w-4 text-green-600" />
                             )}
                             {(generatingVideoId === content.id && generatingVideoLanguage === 'zh') || 
-                             (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ||
-                             generatingSilentVideoId === content.id ? (
+                             (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ? (
                               <Loader className="h-4 w-4 animate-spin text-accent" />
                             ) : null}
                           </div>
                         </div>
                         <Button 
                             onClick={() => handleGenerateChineseVideo(content)}
-                            size="sm"
-                            variant={content.videoUrl ? "outline" : "default"}
                             disabled={
                               (generatingVideoId === content.id && generatingVideoLanguage === 'zh') ||
                               (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ||
-                              generatingSilentVideoId === content.id
+                              generatingSilentVideoId === content.id ||
+                              !(blogCoverUrl || selectedBook?.blogCoverUrl)
                             }
+                            size="sm"
+                            variant={content.videoUrl ? "outline" : "default"}
                           >
                             {(generatingVideoId === content.id && generatingVideoLanguage === 'zh') ||
-                             (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ||
-                             generatingSilentVideoId === content.id ? (
+                             (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ? (
                               <>
                                 <Loader className="mr-2 h-4 w-4 animate-spin" />
                                 Generating...
@@ -1469,6 +1691,24 @@ export function BookManagement() {
                               </>
                             )}
                         </Button>
+                        {/* 提示信息 */}
+                        {!(blogCoverUrl || selectedBook?.blogCoverUrl) && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Please generate blog cover image first
+                          </p>
+                        )}
+                        {/* 进度条显示 */}
+                        {videoProgress[`${content.id}_zh_complete`] !== undefined && (
+                          <div className="mt-2">
+                            <Progress 
+                              value={videoProgress[`${content.id}_zh_complete`] || 0} 
+                              className="h-2" 
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Generation Progress: {videoProgress[`${content.id}_zh_complete`] || 0}%
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       {/* 生成英文视频按钮 */}
@@ -1504,12 +1744,98 @@ export function BookManagement() {
                               toast.info('Generating English video, this may take a few minutes...');
                               
                               try {
-                                const result = await bookAPI.generateEnglishVideo(content.id);
+                                // 重新获取最新的内容数据，确保获取最新的audioUrlEn
+                                if (selectedBook) {
+                                  const updatedContents = await bookAPI.getBookContents(selectedBook.id);
+                                  const updatedContent = updatedContents.find((c: any) => c.id === content.id);
+                                  if (updatedContent) {
+                                    content = updatedContent;
+                                  }
+                                }
+                                
+                                // 步骤1: 如果没有英文音频，先自动生成英文音频
+                                let finalAudioUrl: string | null = null;
+                                
+                                if (!content.audioUrlEn || content.audioUrlEn.includes('myqcloud.com')) {
+                                  // 如果没有英文音频，或者URL是腾讯云临时URL（可能已过期），重新生成
+                                  toast.info('Step 1/2: Generating English audio...');
+                                  setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 10 }));
+                                  
+                                  // 检查是否有英文翻译
+                                  if (!content.chapterTitleEn && !content.summaryEn) {
+                                    throw new Error('Please translate content first. English content is required to generate English audio.');
+                                  }
+                                  
+                                  const audioText = `${content.summaryEn || ''}`.trim();
+                                  if (!audioText) {
+                                    throw new Error('English content text is empty, cannot generate English audio');
+                                  }
+                                  
+                                  // 生成英文音频
+                                  const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en');
+                                  if (!audioResult || !audioResult.audioUrl) {
+                                    throw new Error('生成英文音频失败：未返回有效的音频URL');
+                                  }
+                                  
+                                  // 直接使用API返回的audioUrl（这是LeanCloud的URL）
+                                  finalAudioUrl = audioResult.audioUrl;
+                                  console.log('✅ 英文音频生成成功，LeanCloud URL:', finalAudioUrl);
+                                  
+                                  // 更新本地content对象
+                                  content.audioUrlEn = finalAudioUrl;
+                                  
+                                  // 等待一下，确保数据库更新完成
+                                  await new Promise(resolve => setTimeout(resolve, 1000));
+                                  
+                                  toast.success('English audio generated successfully');
+                                  setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 30 }));
+                                } else {
+                                  // 如果已有英文音频URL，使用它
+                                  finalAudioUrl = content.audioUrlEn;
+                                  
+                                  // 如果URL是腾讯云临时URL，提示并重新生成
+                                  if (finalAudioUrl.includes('myqcloud.com')) {
+                                    console.warn('⚠️ 检测到腾讯云临时URL，可能已过期，重新生成音频...');
+                                    toast.info('Detected temporary URL, regenerating audio...');
+                                    setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 10 }));
+                                    
+                                    const audioText = `${content.summaryEn || ''}`.trim();
+                                    const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en');
+                                    if (!audioResult || !audioResult.audioUrl) {
+                                      throw new Error('重新生成英文音频失败');
+                                    }
+                                    
+                                    finalAudioUrl = audioResult.audioUrl;
+                                    content.audioUrlEn = finalAudioUrl;
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                    setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 30 }));
+                                  }
+                                }
+                                
+                                // 最终验证音频URL
+                                if (!finalAudioUrl || !finalAudioUrl.startsWith('http')) {
+                                  console.error('❌ 音频URL无效:', { 
+                                    audioUrlEn: content.audioUrlEn, 
+                                    finalAudioUrl,
+                                    contentId: content.id
+                                  });
+                                  throw new Error(`Invalid English audio URL: ${finalAudioUrl || 'null'}. Please try again.`);
+                                }
+                                
+                                console.log('📻 使用英文音频URL生成视频:', finalAudioUrl.substring(0, 100) + '...');
+                                
+                                // 步骤2: 使用generateVideo API生成英文视频
+                                toast.info('Step 2/2: Generating English video with blog cover and microphone...');
+                                setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 40 }));
+                                
+                                const result = await bookAPI.generateVideo(content.id, finalAudioUrl, 'en');
                                 if (progressInterval) {
                                   clearInterval(progressInterval);
                                 }
                                 
-                                if (result) {
+                                // 检查返回结果（英文视频可能返回videoUrlEn或videoUrl）
+                                const videoUrl = result?.videoUrlEn || result?.videoUrl;
+                                if (result && videoUrl) {
                                   setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 100 }));
                                   toast.success('English video generated successfully');
                                   // 重新加载内容
@@ -1517,7 +1843,8 @@ export function BookManagement() {
                                     await loadBookContents(selectedBook.id);
                                   }
                                 } else {
-                                  throw new Error('生成英文视频失败：未返回结果');
+                                  console.error('生成英文视频返回结果:', result);
+                                  throw new Error('生成英文视频失败：未返回有效的视频URL');
                                 }
                               } catch (apiError: any) {
                                 if (progressInterval) {
@@ -1535,7 +1862,7 @@ export function BookManagement() {
                           }}
                           size="sm"
                           variant={content.videoUrlEn ? "outline" : "default"}
-                          disabled={generatingEnglishVideoId === content.id || !content.silentVideoUrl}
+                          disabled={generatingEnglishVideoId === content.id || !(blogCoverUrl || selectedBook?.blogCoverUrl)}
                         >
                           {generatingEnglishVideoId === content.id ? (
                             <>
@@ -1561,66 +1888,11 @@ export function BookManagement() {
                             </p>
                           </div>
                         )}
-                        {!content.silentVideoUrl && (
+                        {!(blogCoverUrl || selectedBook?.blogCoverUrl) && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Please generate Chinese video first
+                            Please generate blog cover image first
                           </p>
                         )}
-                        
-                        {/* 生成英文音频按钮 */}
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">Generate English Audio</span>
-                              {content.audioUrlEn && (
-                                <CircleCheck className="h-4 w-4 text-green-600" />
-                              )}
-                              {generatingAudioId === content.id && generatingAudioLanguage === 'en' && (
-                                <Loader className="h-4 w-4 animate-spin text-accent" />
-                              )}
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => handleGenerateAudio(content, 'en')}
-                            size="sm"
-                            variant={content.audioUrlEn ? "outline" : "default"}
-                            disabled={generatingAudioId === content.id || (!content.chapterTitleEn && !content.summaryEn)}
-                            className="w-full"
-                          >
-                            {generatingAudioId === content.id && generatingAudioLanguage === 'en' ? (
-                              <>
-                                <Loader className="mr-2 h-4 w-4 animate-spin" />
-                                Generating...
-                              </>
-                            ) : (
-                              <>
-                                <Volume2 className="mr-2 h-4 w-4" />
-                                {content.audioUrlEn ? 'Regenerate English Audio' : 'Generate English Audio'}
-                              </>
-                            )}
-                          </Button>
-                          {(!content.chapterTitleEn && !content.summaryEn) && (
-                            <p className="text-xs text-muted-foreground mt-2">
-                              Please translate content first
-                            </p>
-                          )}
-                          
-                          {/* 英文音频链接 */}
-                          {content.audioUrlEn && (
-                            <div className="mt-4">
-                              <div className="text-sm font-medium mb-2">English Audio:</div>
-                              <Button 
-                                variant="outline" 
-                                className="w-full"
-                                size="sm"
-                                onClick={() => window.open(content.audioUrlEn, '_blank')}
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                                Open Audio
-                              </Button>
-                            </div>
-                          )}
-                        </div>
                         
                         {content.videoUrlEn && (
                           <div className="mt-4">
@@ -1653,26 +1925,6 @@ export function BookManagement() {
                           </div>
                         )}
                       </div>
-                        
-                        {/* 统一进度条 */}
-                        {(videoProgress[`${content.id}_zh_complete`] !== undefined || 
-                          videoProgress[`${content.id}_zh`] !== undefined ||
-                          videoProgress[content.id] !== undefined) && (
-                          <div className="mt-2">
-                            <Progress 
-                              value={
-                                videoProgress[`${content.id}_zh_complete`] || 
-                                videoProgress[`${content.id}_zh`] || 
-                                videoProgress[content.id] || 
-                                0
-                              } 
-                              className="h-2" 
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Generation Progress: {videoProgress[`${content.id}_zh_complete`] || videoProgress[`${content.id}_zh`] || videoProgress[content.id] || 0}%
-                            </p>
-                      </div>
-                    )}
 
                         {/* 显示中间步骤的结果（可选，用于调试） */}
                         {content.audioUrl && (
@@ -1833,8 +2085,8 @@ export function BookManagement() {
                           )}
                         </div>
                         {content.summary && (
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {content.summary.substring(0, 100)}...
+                          <p className="text-xs text-muted-foreground line-clamp-4">
+                            {content.summary}
                           </p>
                         )}
                         {isGenerating && (
