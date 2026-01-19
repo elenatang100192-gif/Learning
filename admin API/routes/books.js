@@ -2617,8 +2617,14 @@ async function generateSubtitleFile(audioUrl, language, tempDir, contentId, time
     const srtPath = path.join(tempDir, `subtitle_${contentId}_${language}_${timestamp}.srt`);
     const srtContent = convertAsrResultToSRT(resultText);
     
-    await fs.writeFile(srtPath, srtContent, 'utf8');
+    // 确保使用UTF-8 BOM编码，避免中文乱码
+    const BOM = '\uFEFF';
+    const srtContentWithBOM = BOM + srtContent;
+    
+    await fs.writeFile(srtPath, srtContentWithBOM, { encoding: 'utf8' });
     console.log(`✅ 字幕文件生成成功: ${srtPath}`);
+    console.log(`📝 字幕文件编码: UTF-8 with BOM`);
+    console.log(`📝 字幕内容预览（前200字符）: ${srtContent.substring(0, 200)}`);
     
     return srtPath;
   } catch (error) {
@@ -3537,7 +3543,8 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             // 缩放视频
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
-            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+            // 使用charset=utf8参数确保正确读取UTF-8编码的字幕文件，避免中文乱码
+            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -3587,7 +3594,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -5163,7 +5170,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
             // 缩放视频
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
-            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+            // 使用charset=utf8参数确保正确读取UTF-8编码的字幕文件，避免中文乱码
+            `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -5213,7 +5221,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
+                  `[v]subtitles='${tempSubtitlePath.replace(/\\/g, '/').replace(/'/g, "\\'")}':charset=utf8:force_style='FontName=Arial,FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=2'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
