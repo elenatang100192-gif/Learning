@@ -3233,6 +3233,37 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   
+  // 设置流式响应头（Server-Sent Events），用于保持连接活跃并发送进度更新
+  res.header('Content-Type', 'text/event-stream');
+  res.header('Cache-Control', 'no-cache');
+  res.header('Connection', 'keep-alive');
+  res.header('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
+  
+  // 发送进度更新的辅助函数
+  const sendProgress = (message, progress = null) => {
+    try {
+      const data = JSON.stringify({ message, progress, timestamp: Date.now() });
+      res.write(`data: ${data}\n\n`);
+      console.log(`📊 进度更新: ${message}${progress !== null ? ` (${progress}%)` : ''}`);
+    } catch (err) {
+      console.error('❌ 发送进度更新失败:', err);
+    }
+  };
+  
+  // 发送心跳以保持连接活跃（每30秒发送一次）
+  const heartbeatInterval = setInterval(() => {
+    try {
+      res.write(`: heartbeat\n\n`);
+    } catch (err) {
+      clearInterval(heartbeatInterval);
+    }
+  }, 30000);
+  
+  // 清理函数
+  const cleanup = () => {
+    clearInterval(heartbeatInterval);
+  };
+  
   let tempVideoPath = null;
   let tempAudioPath = null;
   let tempOutputPath = null;
@@ -3244,10 +3275,13 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     console.log('📥 请求体:', JSON.stringify(req.body, null, 2));
     console.log('🌐 Origin:', origin);
     
+    sendProgress('开始处理视频生成请求', 0);
+    
     const { contentId } = req.params;
     const { audioUrl, language = 'zh' } = req.body;
 
     console.log(`📝 开始处理${language === 'zh' ? '中文' : '英文'}视频生成，ContentId: ${contentId}`);
+    sendProgress(`开始处理${language === 'zh' ? '中文' : '英文'}视频生成`, 5);
 
     // 获取内容信息
     let contentObj;
@@ -3335,6 +3369,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     await contentObj.save();
 
     console.log(`📝 开始生成${language === 'zh' ? '中文' : '英文'}视频（使用博客封面图）`);
+    sendProgress('准备生成视频', 10);
 
     const tempDir = os.tmpdir();
     const timestamp = Date.now();
@@ -3369,6 +3404,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     console.log('📥 开始下载音频');
     console.log('📥 原始URL:', finalAudioUrl);
     console.log('📥 处理后的URL:', audioUrlToFetch);
+    sendProgress('正在下载音频文件', 15);
     
     let audioResponse;
     try {
@@ -3466,6 +3502,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     
     const audioDurationSeconds = Math.ceil(audioDuration);
     console.log('📊 音频总时长:', audioDurationSeconds, '秒');
+    sendProgress('正在生成字幕文件', 30);
     
     // 使用腾讯云ASR生成字幕文件（基于音频URL）
     // 确保音频URL是HTTPS格式
@@ -3482,6 +3519,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       contentId,
       timestamp
     );
+    sendProgress('字幕生成完成', 40);
     
     // 下载博客封面图
     console.log('📥 开始下载博客封面图:', blogCoverUrl);
@@ -3509,6 +3547,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     const coverImagePath = path.join(tempDir, `cover_${contentId}_${timestamp}.jpg`);
     await fs.writeFile(coverImagePath, coverImageBuffer);
     console.log('✅ 博客封面图保存完成');
+    sendProgress('封面图下载完成', 50);
     
     // 视频参数（9:16比例，720x1280）
     const videoWidth = 720;
@@ -3518,6 +3557,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     // 使用ffmpeg将博客封面图转换为视频（静态图片，匹配音频时长）
     tempVideoPath = path.join(tempDir, `video_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始生成视频（使用博客封面图）');
+    sendProgress('正在生成视频', 55);
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
@@ -3572,6 +3612,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     // 合并视频和音频（如果有字幕则嵌入字幕）
     tempOutputPath = path.join(tempDir, `output_${contentId}_${language}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频' + (tempSubtitlePath ? '（包含字幕）' : ''));
+    sendProgress('正在合并视频和音频', 75);
     
     // 如果有字幕文件，先验证文件是否存在
     if (tempSubtitlePath) {
@@ -3642,6 +3683,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
         .on('end', () => {
           if (timeoutId) clearTimeout(timeoutId);
           console.log('✅ 视频合并完成');
+          sendProgress('视频合并完成', 85);
           resolve(null);
         })
         .on('error', (err) => {
@@ -3650,6 +3692,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
           // 如果copy失败，尝试重新编码
           if (err.message && err.message.includes('copy')) {
             console.log('⚠️ 视频流复制失败，尝试重新编码...');
+            sendProgress('视频流复制失败，尝试重新编码', 80);
             let fallbackProcess = ffmpeg()
               .input(tempVideoPath)
               .input(tempAudioPath);
@@ -3687,6 +3730,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             fallbackProcess = fallbackProcess.output(tempOutputPath)
               .on('end', () => {
                 console.log('✅ 视频合并完成（使用重新编码）');
+                sendProgress('视频合并完成', 85);
                 resolve(null);
               })
               .on('error', (fallbackErr) => {
@@ -3702,11 +3746,13 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     });
     
     // 上传合并后的视频到LeanCloud
+    sendProgress('正在上传视频', 90);
     const outputBuffer = await fs.readFile(tempOutputPath);
     const videoFile = new AV.File(`video_${contentId}_${language}_${timestamp}.mp4`, outputBuffer, 'video/mp4');
     await videoFile.save();
     const finalVideoUrl = videoFile.url();
     console.log('✅ 视频上传成功，URL:', finalVideoUrl);
+    sendProgress('视频上传完成', 95);
     
     // 更新ExtractedContent记录
     if (language === 'en') {
@@ -3750,11 +3796,14 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       responseData.videoUrl = finalVideoUrl;
     }
     
-    res.json({
-      success: true,
-      data: responseData
-    });
+    // 发送完成消息（SSE格式）
+    cleanup();
+    sendProgress('视频生成完成', 100);
+    const finalData = JSON.stringify({ success: true, data: responseData, completed: true });
+    res.write(`data: ${finalData}\n\n`);
+    res.end();
   } catch (error) {
+    cleanup();
     console.error('❌ 生成视频失败:', error);
     console.error('❌ 错误堆栈:', error.stack);
     console.error('❌ 错误详情:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
@@ -3792,32 +3841,27 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
         console.error('❌ 更新内容状态失败:', updateError);
       }
 
+      // 发送错误消息（SSE格式）
+      let errorMessage = '生成视频失败';
+      let errorSuggestion = '';
+      
       // 检查是否是网络错误
       if (error.message && (error.message.includes('fetch failed') || error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT') || error.message.includes('下载'))) {
-        return res.status(500).json({
-          success: false,
-          message: '下载视频或音频文件失败，请检查网络连接',
-          error: error.message,
-          suggestion: '请检查silentVideoUrl和audioUrl是否可访问'
-        });
+        errorMessage = '下载视频或音频文件失败，请检查网络连接';
+        errorSuggestion = '请检查silentVideoUrl和audioUrl是否可访问';
+      } else if (error.message && (error.message.includes('FFmpeg') || error.message.includes('合并') || error.message.includes('超时'))) {
+        errorMessage = '视频处理失败';
+        errorSuggestion = '请检查FFmpeg是否正确安装，或重试';
       }
 
-      // 检查是否是FFmpeg错误
-      if (error.message && (error.message.includes('FFmpeg') || error.message.includes('合并') || error.message.includes('超时'))) {
-        return res.status(500).json({
-          success: false,
-          message: '视频合并失败',
-          error: error.message,
-          suggestion: '请检查FFmpeg是否正确安装，或重试'
-        });
-      }
-
-      // 返回详细的错误信息
+      // 发送错误消息（SSE格式）
       const errorResponse = {
         success: false,
-        message: '生成视频失败',
+        message: errorMessage,
         error: error.message || String(error),
-        contentId: req.params.contentId
+        suggestion: errorSuggestion,
+        contentId: req.params.contentId,
+        completed: true
       };
       
       // 在开发环境下返回更多调试信息
@@ -3826,7 +3870,9 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
         errorResponse.details = JSON.stringify(error, Object.getOwnPropertyNames(error));
       }
       
-      res.status(500).json(errorResponse);
+      const errorData = JSON.stringify(errorResponse);
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
     } else {
       console.error('❌ 响应已发送，无法发送错误响应');
     }
