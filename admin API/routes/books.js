@@ -3802,8 +3802,8 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             // Alignment=2：底部居中
             // WrapStyle=0：智能换行，确保长文本自动换行不超出屏幕
             // MarginL=20,MarginR=20：左右边距，确保字幕不超出屏幕边界
-            // MarginV=150：垂直边距，确保字幕在屏幕底部可见区域内
-            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+            // MarginV=280：垂直边距，让字幕在视频标题模块上方（手机端标题在底部，字幕需要在标题上方）
+            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=280,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -3855,7 +3855,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=280,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -5540,8 +5540,8 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
             // Alignment=2：底部居中
             // WrapStyle=0：智能换行，确保长文本自动换行不超出屏幕
             // MarginL=20,MarginR=20：左右边距，确保字幕不超出屏幕边界
-            // MarginV=150：垂直边距，确保字幕在屏幕底部可见区域内
-            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+            // MarginV=280：垂直边距，让字幕在视频标题模块上方（手机端标题在底部，字幕需要在标题上方）
+            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=280,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -5591,7 +5591,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=150,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=280,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
