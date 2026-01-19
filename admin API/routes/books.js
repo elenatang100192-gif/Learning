@@ -2622,6 +2622,35 @@ ${textContent}
 // 字幕提前量（秒），让字幕提前出现以匹配音频
 const SUBTITLE_ADVANCE_TIME = 0.7; // 提前0.7秒，增加提前量以改善同步
 
+// 检查FFmpeg版本和subtitles滤镜支持情况
+async function checkFFmpegSubtitlesSupport() {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe('', (err) => {
+      // 忽略错误，只是检查FFmpeg是否可用
+      const { execSync } = require('child_process');
+      try {
+        // 检查FFmpeg版本
+        const versionOutput = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 5000 });
+        const versionMatch = versionOutput.match(/ffmpeg version (\d+\.\d+\.\d+)/);
+        const version = versionMatch ? versionMatch[1] : 'unknown';
+        
+        // 检查subtitles滤镜是否支持charenc参数
+        try {
+          const filterHelp = execSync('ffmpeg -h filter=subtitles', { encoding: 'utf8', timeout: 5000 });
+          const supportsCharenc = filterHelp.includes('charenc') || filterHelp.includes('character encoding');
+          resolve({ version, supportsCharenc, available: true });
+        } catch (e) {
+          // 如果无法获取帮助信息，假设支持（较新版本都支持）
+          resolve({ version, supportsCharenc: true, available: true });
+        }
+      } catch (e) {
+        console.warn('⚠️ 无法检查FFmpeg版本:', e.message);
+        resolve({ version: 'unknown', supportsCharenc: true, available: false });
+      }
+    });
+  });
+}
+
 // 转义字幕文件路径，用于FFmpeg subtitles滤镜
 // 在Docker容器中，路径需要特殊处理以确保FFmpeg能正确读取
 function escapeSubtitlePath(filePath) {
@@ -3767,9 +3796,9 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
             // 显式指定输入编码为UTF-8，确保中文字幕正确显示
-            // 字幕文件已使用UTF-8 BOM编码，但显式指定input_encoding更可靠
+            // 字幕文件已使用UTF-8 BOM编码，但显式指定charenc参数更可靠
             // 简化force_style参数，只保留最常用和兼容性好的参数
-            `[v]subtitles='${escapedSubtitlePath}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -3821,7 +3850,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -5499,9 +5528,9 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
             `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
             // 添加字幕（硬字幕，烧录到视频帧上）
             // 显式指定输入编码为UTF-8，确保中文字幕正确显示
-            // 字幕文件已使用UTF-8 BOM编码，但显式指定input_encoding更可靠
+            // 字幕文件已使用UTF-8 BOM编码，但显式指定charenc参数更可靠
             // 简化force_style参数，只保留最常用和兼容性好的参数
-            `[v]subtitles='${escapedSubtitlePath}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -5551,7 +5580,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':input_encoding=utf8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV=150'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
