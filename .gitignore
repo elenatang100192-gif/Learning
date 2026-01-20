@@ -60,3 +60,4 @@ SENSITIVE_INFO.md
 *.seed
 *.pid.lock
 
+PRODUCTION_ENV_COMPLETE.md
