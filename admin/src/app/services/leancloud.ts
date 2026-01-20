@@ -200,6 +200,7 @@ export interface Video {
   aiExtractDate?: string;
   author?: any;
   reviewNotes?: string;
+  displayOrder?: number; // 前端手机端展示顺序，数字越小越靠前
   createdAt?: Date;
 }
 
@@ -657,6 +658,9 @@ export const videoAPI = {
     // 分页和排序
     query.limit(limit);
     query.skip((page - 1) * limit);
+    // 优先按displayOrder排序（升序，null值会被放在最后），然后按createdAt排序（降序）
+    // 注意：LeanCloud会先按displayOrder排序，对于displayOrder相同的记录再按createdAt排序
+    query.addAscending('displayOrder');
     query.descending('createdAt');
 
     // 关联查询
@@ -696,6 +700,7 @@ export const videoAPI = {
         email: item.get('author').get('email')
       } : undefined,
       reviewNotes: item.get('reviewNotes'),
+      displayOrder: item.get('displayOrder') || undefined,
       createdAt: item.createdAt
     })) as Video[];
   },
@@ -747,6 +752,29 @@ export const videoAPI = {
         throw new Error(response.message || '更新失败');
       } catch (error) {
         console.error('更新视频分类失败:', error);
+        throw error;
+      }
+    }
+
+    // 如果只更新displayOrder，使用后端API（绕过ACL）
+    if (videoData.displayOrder !== undefined && Object.keys(videoData).length === 1) {
+      try {
+        const response = await apiRequest(`/videos/${id}/displayOrder`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            displayOrder: videoData.displayOrder
+          }),
+        });
+        if (response.success) {
+          return {
+            id: response.data.id,
+            displayOrder: response.data.displayOrder,
+            createdAt: new Date()
+          } as Partial<Video>;
+        }
+        throw new Error(response.message || '更新失败');
+      } catch (error) {
+        console.error('更新视频显示顺序失败:', error);
         throw error;
       }
     }

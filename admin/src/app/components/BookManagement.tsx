@@ -1316,7 +1316,7 @@ export function BookManagement() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BookOpen className="h-5 w-5" />
-              {selectedBook?.title} - Chinese Content
+              {selectedBook?.title}
             </DialogTitle>
             <DialogDescription>
               View AI-extracted Chinese content and generate Chinese audio and video

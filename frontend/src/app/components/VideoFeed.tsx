@@ -23,6 +23,7 @@ interface FrontendVideo {
   isLiked: boolean;
   isSaved: boolean;
   isFollowing: boolean;
+  displayOrder?: number; // 前端手机端展示顺序，数字越小越靠前
 }
 
 interface VideoFeedProps {
@@ -102,7 +103,8 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
       shares: 0,   // TODO: 添加分享功能
       isLiked,
       isSaved: isFavorited,
-      isFollowing
+      isFollowing,
+      displayOrder: leanCloudVideo.displayOrder
     };
   };
 
@@ -160,6 +162,21 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
           }
         }
 
+        // 按displayOrder排序（升序），displayOrder为undefined/null的排在后面，然后按createdAt排序（降序）
+        uniqueVideos.sort((a, b) => {
+          const orderA = a.displayOrder !== undefined && a.displayOrder !== null ? a.displayOrder : Number.MAX_SAFE_INTEGER;
+          const orderB = b.displayOrder !== undefined && b.displayOrder !== null ? b.displayOrder : Number.MAX_SAFE_INTEGER;
+          
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          
+          // 如果displayOrder相同，按uploadDate降序排序（最新的在前）
+          const dateA = a.uploadDate ? new Date(a.uploadDate).getTime() : 0;
+          const dateB = b.uploadDate ? new Date(b.uploadDate).getTime() : 0;
+          return dateB - dateA;
+        });
+
         // 如果去重后数量减少，记录详细信息
         if (uniqueVideos.length < filteredVideos.length) {
           console.warn(`⚠️ 发现重复视频，已去重。原始数量: ${filteredVideos.length}, 去重后: ${uniqueVideos.length}`);
@@ -214,6 +231,21 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
           })));
         }
 
+        // 确保最终列表也按displayOrder排序（防止后续处理破坏排序）
+        finalVideos.sort((a, b) => {
+          const orderA = a.displayOrder !== undefined && a.displayOrder !== null ? a.displayOrder : Number.MAX_SAFE_INTEGER;
+          const orderB = b.displayOrder !== undefined && b.displayOrder !== null ? b.displayOrder : Number.MAX_SAFE_INTEGER;
+          
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          
+          // 如果displayOrder相同，按uploadDate降序排序（最新的在前）
+          const dateA = a.uploadDate ? new Date(a.uploadDate).getTime() : 0;
+          const dateB = b.uploadDate ? new Date(b.uploadDate).getTime() : 0;
+          return dateB - dateA;
+        });
+        
         setVideos(finalVideos);
         setCurrentIndex(0); // 重置到第一个视频
       } catch (error) {
@@ -362,7 +394,8 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
               paddingBottom: '0px',
             }}
           >
-            <div className="bg-black/30 pt-4 -mx-4 px-4 rounded-t-lg">
+            {/* 遮罩层 - 位置在底部，高度自适应，确保字幕区域（距离底部400px）在遮罩上方可见，不重叠 */}
+            <div className="bg-black/30 pt-4 pb-2 -mx-4 px-4 rounded-t-lg" style={{ maxHeight: '350px' }}>
               <div className="text-white pointer-events-auto">
                 <div className="flex items-center gap-3 mb-2">
                   <img
@@ -392,15 +425,16 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
                     )}
                   </div>
                 </div>
-                {/* 视频标题 */}
+                {/* 视频标题 - 在第一屏完整展示，自适应高度，如果内容过长可以滚动查看 */}
                 <p 
                   className="text-sm leading-relaxed pr-20"
                   style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
                     wordBreak: 'break-word',
+                    display: 'block',
+                    maxHeight: '280px', // 遮罩最大高度350px - 作者信息行60px - padding 10px = 280px
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    WebkitOverflowScrolling: 'touch', // iOS平滑滚动
                   }}
                 >
                   {language === 'zh' ? currentVideo.title : currentVideo.titleEn}

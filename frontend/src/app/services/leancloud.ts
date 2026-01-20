@@ -61,6 +61,7 @@ export interface Video {
   likeCount: number;
   uploadDate: string;
   publishDate?: string;
+  displayOrder?: number; // 前端手机端展示顺序，数字越小越靠前
   author?: User;
 }
 

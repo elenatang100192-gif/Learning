@@ -67,7 +67,9 @@ router.get('/', async (req, res) => {
       console.log('使用默认过滤: 已发布且未禁用');
     }
 
-    // 排序
+    // 排序：优先按displayOrder排序（升序），然后按createdAt排序（降序）
+    // displayOrder为null/undefined的视频会排在后面
+    query.addAscending('displayOrder');
     query.descending('createdAt');
 
     // 分页
@@ -83,6 +85,36 @@ router.get('/', async (req, res) => {
     query.include('book');
 
     const videos = await query.find();
+
+    // 手动排序：确保displayOrder为null/undefined的视频排在后面
+    // LeanCloud的addAscending可能会把null值排在最前面，所以需要手动处理
+    videos.sort((a, b) => {
+      const orderA = a.get('displayOrder');
+      const orderB = b.get('displayOrder');
+      
+      // 如果两个都有displayOrder，按升序排序
+      if (orderA !== null && orderA !== undefined && orderB !== null && orderB !== undefined) {
+        if (orderA !== orderB) {
+          return orderA - orderB; // 升序：1 < 2 < 3
+        }
+        // 如果displayOrder相同，按createdAt降序排序（最新的在前）
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      }
+      // 如果只有A有displayOrder，A排在前面
+      else if (orderA !== null && orderA !== undefined && (orderB === null || orderB === undefined)) {
+        return -1;
+      }
+      // 如果只有B有displayOrder，B排在前面
+      else if ((orderA === null || orderA === undefined) && orderB !== null && orderB !== undefined) {
+        return 1;
+      }
+      // 如果两个都没有displayOrder，按createdAt降序排序（最新的在前）
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
 
     // 转换数据格式
     const videoData = videos.map(video => {
@@ -132,6 +164,7 @@ router.get('/', async (req, res) => {
         likeCount: Math.max(0, video.get('likeCount') || 0), // 确保不会是负数
         uploadDate: video.createdAt.toISOString().split('T')[0],
         publishDate: video.get('publishDate'),
+        displayOrder: video.get('displayOrder') || undefined,
         author: authorData,
         book: video.get('book') ? {
           id: video.get('book').id,
@@ -657,6 +690,61 @@ router.put('/:id/category', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to update video category',
+      error: error.message
+    });
+  }
+});
+
+// 更新视频显示顺序（后台管理使用，使用Master Key绕过ACL）
+router.put('/:id/displayOrder', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { displayOrder } = req.body;
+
+    if (displayOrder === undefined || displayOrder === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing displayOrder'
+      });
+    }
+
+    if (typeof displayOrder !== 'number' || displayOrder < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'displayOrder must be a non-negative number'
+      });
+    }
+
+    // 获取视频对象（使用Master Key）
+    const video = await new AV.Query('Video').get(id, { useMasterKey: true });
+    
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        message: 'Video not found'
+      });
+    }
+
+    // 更新视频显示顺序（使用Master Key）
+    video.set('displayOrder', displayOrder);
+    await video.save(null, { useMasterKey: true });
+
+    console.log(`✅ 视频显示顺序更新: ${id} - displayOrder: ${displayOrder}`);
+
+    res.json({
+      success: true,
+      message: 'Video display order updated successfully',
+      data: {
+        id: video.id,
+        displayOrder: displayOrder
+      }
+    });
+
+  } catch (error) {
+    console.error('Update video display order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update video display order',
       error: error.message
     });
   }

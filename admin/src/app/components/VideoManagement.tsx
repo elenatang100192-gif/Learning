@@ -10,7 +10,7 @@ import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Skeleton } from './ui/skeleton';
-import { Search, Play, Eye, ThumbsUp, Clock, CheckCircle, XCircle, Ban, Upload, Power, FileVideo, Image as ImageIcon, RefreshCw, Trash2, Edit } from 'lucide-react';
+import { Search, Play, Eye, ThumbsUp, Clock, CheckCircle, XCircle, Ban, Upload, Power, FileVideo, Image as ImageIcon, RefreshCw, Trash2, Edit, ArrowUpDown } from 'lucide-react';
 import { Progress } from './ui/progress';
 import { toast } from 'sonner';
 import { videoAPI, categoryAPI, bookAPI, type Video, type Category } from '../services/leancloud';
@@ -30,6 +30,8 @@ export function VideoManagement() {
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editingCategory, setEditingCategory] = useState<string>('');
+  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<number>(0);
   const [activeTab, setActiveTab] = useState('all');
   
   // 后台发布表单状态
@@ -446,6 +448,26 @@ export function VideoManagement() {
     }
   };
 
+  // 修改视频显示顺序
+  const handleEditOrder = async () => {
+    if (!editingVideo || editingOrder < 0) {
+      toast.error('Please enter a valid order number (>= 0)');
+      return;
+    }
+
+    try {
+      await videoAPI.update(editingVideo.id, { displayOrder: editingOrder });
+      toast.success('Display order updated successfully');
+      setIsEditOrderDialogOpen(false);
+      setEditingVideo(null);
+      setEditingOrder(0);
+      loadData(); // 重新加载数据
+    } catch (error) {
+      console.error('修改显示顺序失败:', error);
+      toast.error('Failed to update display order');
+    }
+  };
+
   const getStatusBadge = (status: VideoStatus, disabled?: boolean) => {
     if (disabled) {
       return <Badge variant="outline" className="border-gray-500 text-gray-700">Disabled</Badge>;
@@ -503,6 +525,21 @@ export function VideoManagement() {
       );
     }
     
+    // 按displayOrder排序（升序），displayOrder为undefined/null的排在后面，然后按createdAt排序（降序）
+    filtered.sort((a, b) => {
+      const orderA = a.displayOrder !== undefined && a.displayOrder !== null ? a.displayOrder : Number.MAX_SAFE_INTEGER;
+      const orderB = b.displayOrder !== undefined && b.displayOrder !== null ? b.displayOrder : Number.MAX_SAFE_INTEGER;
+      
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      
+      // 如果displayOrder相同，按createdAt降序排序（最新的在前）
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+    
     return filtered;
   };
 
@@ -524,6 +561,7 @@ export function VideoManagement() {
               <TableHead>Views</TableHead>
               <TableHead>Likes</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Display Order</TableHead>
               {tab === 'disabled' && <TableHead>Author</TableHead>}
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -531,7 +569,7 @@ export function VideoManagement() {
           <TableBody>
             {filteredVideos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={tab === 'disabled' ? 9 : 8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={tab === 'disabled' ? 10 : 9} className="text-center py-12 text-muted-foreground">
                   No videos available
                 </TableCell>
               </TableRow>
@@ -567,6 +605,11 @@ export function VideoManagement() {
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(video.status, video.disabled)}</TableCell>
+                  <TableCell>
+                    <span className="text-muted-foreground">
+                      {video.displayOrder !== undefined ? video.displayOrder : '-'}
+                    </span>
+                  </TableCell>
                   {tab === 'disabled' && (
                     <TableCell>
                       <span className="text-muted-foreground">{getAuthorDisplay(video.author)}</span>
@@ -655,6 +698,79 @@ export function VideoManagement() {
                         </DialogContent>
                       </Dialog>
                       
+                      {/* 修改显示顺序按钮 */}
+                      <Dialog open={isEditOrderDialogOpen && editingVideo?.id === video.id} onOpenChange={(open) => {
+                        setIsEditOrderDialogOpen(open);
+                        if (!open) {
+                          setEditingVideo(null);
+                          setEditingOrder(0);
+                        }
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              // 计算当前视频在排序列表中的实际位置（从1开始）
+                              const filteredVideos = filterByTab(tab);
+                              const currentIndex = filteredVideos.findIndex(v => v.id === video.id);
+                              
+                              setEditingVideo(video);
+                              // 如果video有displayOrder，使用它；否则使用当前排序位置（从1开始）
+                              if (video.displayOrder !== undefined && video.displayOrder !== null) {
+                                setEditingOrder(video.displayOrder);
+                              } else {
+                                // 使用当前在排序列表中的位置（从1开始）
+                                setEditingOrder(currentIndex >= 0 ? currentIndex + 1 : filteredVideos.length + 1);
+                              }
+                              setIsEditOrderDialogOpen(true);
+                            }}
+                            className="hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <ArrowUpDown className="h-3 w-3 mr-1" />
+                            Edit Order
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Edit Display Order</DialogTitle>
+                            <DialogDescription>
+                              Set the display order for video "{video.title}" on mobile frontend. Lower numbers appear first.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label>Display Order</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={editingOrder}
+                                onChange={(e) => setEditingOrder(parseInt(e.target.value) || 0)}
+                                placeholder="Enter order number (0, 1, 2, ...)"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Videos with lower order numbers will appear first on the mobile frontend. Current order: {video.displayOrder !== undefined && video.displayOrder !== null ? video.displayOrder : 'Not set (will appear after ordered videos)'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setIsEditOrderDialogOpen(false);
+                                setEditingVideo(null);
+                                setEditingOrder(0);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button onClick={handleEditOrder}>
+                              Save
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      
                       {video.status === '待审核' && (
                         <Dialog open={isReviewDialogOpen && selectedVideo?.id === video.id} onOpenChange={(open) => {
                           setIsReviewDialogOpen(open);
@@ -684,11 +800,14 @@ export function VideoManagement() {
                             </DialogHeader>
                             <div className="space-y-4">
                               <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                                <img 
-                                  src={video.coverUrl} 
-                                  alt={video.title}
-                                  className="w-full h-full object-cover"
-                                />
+                                <video
+                                  controls
+                                  className="w-full h-full"
+                                  src={video.videoUrlEn || video.videoUrl}
+                                  poster={video.coverUrl}
+                                >
+                                  Your browser does not support video playback.
+                                </video>
                               </div>
                               <div>
                                 <h3>{video.title}</h3>

@@ -1967,7 +1967,8 @@ router.post('/content/:contentId/generate-silent-video', async (req, res) => {
     }
 
     // 获取文本内容（优先使用中文，如果没有则使用英文）
-    const textContent = contentObj.get('summary') || contentObj.get('summaryEn') || contentObj.get('chapterTitle') || '';
+    // 只使用summary，不包含标题
+    const textContent = contentObj.get('summary') || contentObj.get('summaryEn') || '';
     if (!textContent) {
       return res.status(400).json({
         success: false,
@@ -2800,7 +2801,10 @@ async function generateSubtitleFile(audioUrl, language, tempDir, contentId, time
   } catch (error) {
     console.error('❌ 使用腾讯云ASR生成字幕失败:', error);
     console.error('❌ 错误详情:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    console.error('❌ 错误消息:', error.message);
+    console.error('❌ 错误堆栈:', error.stack);
     // 如果生成失败，返回null，视频仍然可以生成，只是没有字幕
+    console.warn('⚠️ 字幕生成失败，视频将继续生成但不包含字幕');
     return null;
   }
 }
@@ -2834,7 +2838,8 @@ function convertAsrResultToSRT(resultText) {
         // 只根据时间间隔来分段，确保字幕与音频完全同步
         const subtitleBlocks = [];
         let currentBlock = { words: [], startTime: null, endTime: null };
-        const MAX_TIME_GAP = 0.5; // 如果单词间隔超过0.5秒，开始新的字幕块（仅用于自然分段）
+        const MAX_TIME_GAP = 1.2; // 如果单词间隔超过1.2秒，开始新的字幕块（增加间隔以减少每屏字数）
+        const MAX_WORDS_PER_BLOCK = 5; // 每块最多5个单词，进一步减少每屏字幕数量
         
         for (let i = 0; i < parsedData.words.length; i++) {
           const word = parsedData.words[i];
@@ -2848,8 +2853,8 @@ function convertAsrResultToSRT(resultText) {
               ? wordStartTime - currentBlock.endTime 
               : 0;
             
-            // 如果单词间隔太大，开始新块（不限制字数，确保同步）
-            if (timeGap > MAX_TIME_GAP) {
+            // 如果单词间隔太大，或者当前块单词数已达到上限，开始新块
+            if (timeGap > MAX_TIME_GAP || currentBlock.words.length >= MAX_WORDS_PER_BLOCK) {
               if (currentBlock.words.length > 0 && currentBlock.startTime !== null) {
                 subtitleBlocks.push({
                   text: currentBlock.words.join(''),
@@ -2861,8 +2866,18 @@ function convertAsrResultToSRT(resultText) {
             }
           }
           
-          // 添加单词到当前块（不限制字数）
+          // 添加单词到当前块
           if (wordText.trim().length > 0) {
+            // 如果当前块已满，先保存当前块再开始新块
+            if (currentBlock.words.length >= MAX_WORDS_PER_BLOCK && currentBlock.startTime !== null) {
+              subtitleBlocks.push({
+                text: currentBlock.words.join(''),
+                startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
+                endTime: currentBlock.endTime || 0
+              });
+              currentBlock = { words: [], startTime: null, endTime: null };
+            }
+            
             if (currentBlock.startTime === null && wordStartTime !== null) {
               currentBlock.startTime = wordStartTime;
             }
@@ -2883,22 +2898,55 @@ function convertAsrResultToSRT(resultText) {
         }
         
         // 生成SRT（完全按照ASR返回的时间戳，不限制字数）
-        for (const block of subtitleBlocks) {
+        // 确保时间戳不重叠：上一句消失后再显示下一句
+        for (let i = 0; i < subtitleBlocks.length; i++) {
+          const block = subtitleBlocks[i];
+          let endTime = block.endTime;
+          
+          // 如果下一句存在且开始时间早于当前句的结束时间，调整当前句的结束时间
+          if (i < subtitleBlocks.length - 1) {
+            const nextStartTime = subtitleBlocks[i + 1].startTime;
+            if (endTime > nextStartTime) {
+              endTime = nextStartTime;
+            }
+          }
+          
+          // 确保结束时间大于开始时间
+          if (endTime <= block.startTime) {
+            endTime = block.startTime + 0.1; // 至少显示0.1秒
+          }
+          
           srtContent += `${index}\n`;
-          srtContent += `${formatSRTTime(block.startTime)} --> ${formatSRTTime(block.endTime)}\n`;
-          srtContent += `${block.text.trim()}\n\n`;
+          srtContent += `${formatSRTTime(block.startTime)} --> ${formatSRTTime(endTime)}\n`;
+          srtContent += `${wrapSubtitleText(block.text)}\n\n`;
           index++;
         }
       } else if (parsedData.sentences && Array.isArray(parsedData.sentences)) {
         // 如果有sentences数组
-        for (const sentence of parsedData.sentences) {
+        // 确保时间戳不重叠：上一句消失后再显示下一句
+        const sentences = parsedData.sentences;
+        for (let i = 0; i < sentences.length; i++) {
+          const sentence = sentences[i];
           const startTime = Math.max(0, (sentence.start_time || sentence.startTime || 0) / 1000 - SUBTITLE_ADVANCE_TIME);
-          const endTime = (sentence.end_time || sentence.endTime || 0) / 1000;
+          let endTime = (sentence.end_time || sentence.endTime || 0) / 1000;
           const text = sentence.text || sentence.word || '';
+          
+          // 如果下一句存在且开始时间早于当前句的结束时间，调整当前句的结束时间
+          if (i < sentences.length - 1) {
+            const nextStartTime = Math.max(0, (sentences[i + 1].start_time || sentences[i + 1].startTime || 0) / 1000 - SUBTITLE_ADVANCE_TIME);
+            if (endTime > nextStartTime) {
+              endTime = nextStartTime;
+            }
+          }
+          
+          // 确保结束时间大于开始时间
+          if (endTime <= startTime) {
+            endTime = startTime + 0.1; // 至少显示0.1秒
+          }
           
           srtContent += `${index}\n`;
           srtContent += `${formatSRTTime(startTime)} --> ${formatSRTTime(endTime)}\n`;
-          srtContent += `${text.trim()}\n\n`;
+          srtContent += `${wrapSubtitleText(text)}\n\n`;
           index++;
         }
       }
@@ -2909,6 +2957,9 @@ function convertAsrResultToSRT(resultText) {
       const textStr = typeof resultText === 'string' ? resultText : JSON.stringify(resultText);
       const lines = textStr.split('\n').filter(line => line.trim().length > 0);
       
+      // 先收集所有字幕条目
+      const subtitleEntries = [];
+      
       for (const line of lines) {
         // 格式1: [M:SS.mmm,M:SS.mmm]  文本内容（腾讯云ASR标准格式）
         // 例如：[0:0.040,0:22.140]  美国花卉产业的崛起...
@@ -2917,19 +2968,19 @@ function convertAsrResultToSRT(resultText) {
         if (bracketTimeMatch) {
           const [, startMin, startSec, endMin, endSec, text] = bracketTimeMatch;
           
-          // 转换为SRT时间格式：HH:MM:SS,mmm，并提前字幕时间
+          // 转换为秒数，并提前字幕时间
           const startSeconds = parseInt(startMin) * 60 + parseFloat(startSec) - SUBTITLE_ADVANCE_TIME;
-          const startTime = formatSRTTime(Math.max(0, startSeconds));
-          const endTime = convertToSRTTime(parseInt(endMin), parseFloat(endSec));
+          const endSeconds = parseInt(endMin) * 60 + parseFloat(endSec);
           
           // 清理文本：移除多余空格，过滤掉明显不是文本的内容
           const cleanText = cleanSubtitleText(text);
           
           if (cleanText && cleanText.trim().length > 0) {
-            srtContent += `${index}\n`;
-            srtContent += `${startTime} --> ${endTime}\n`;
-            srtContent += `${cleanText}\n\n`;
-            index++;
+            subtitleEntries.push({
+              startTime: Math.max(0, startSeconds),
+              endTime: endSeconds,
+              text: cleanText
+            });
           }
           continue;
         }
@@ -2945,14 +2996,15 @@ function convertAsrResultToSRT(resultText) {
           
           // 提前字幕开始时间
           const startSeconds = parseSRTTime(startTime) - SUBTITLE_ADVANCE_TIME;
-          const adjustedStartTime = formatSRTTime(Math.max(0, startSeconds));
+          const endSeconds = parseSRTTime(endTime);
           
           const cleanText = cleanSubtitleText(text);
           if (cleanText && cleanText.trim().length > 0) {
-            srtContent += `${index}\n`;
-            srtContent += `${adjustedStartTime} --> ${endTime}\n`;
-            srtContent += `${cleanText}\n\n`;
-            index++;
+            subtitleEntries.push({
+              startTime: Math.max(0, startSeconds),
+              endTime: endSeconds,
+              text: cleanText
+            });
           }
           continue;
         }
@@ -2964,14 +3016,42 @@ function convertAsrResultToSRT(resultText) {
           startTime = startTime.replace('.', ',');
           endTime = endTime.replace('.', ',');
           
+          const startSeconds = parseSRTTime(startTime);
+          const endSeconds = parseSRTTime(endTime);
+          
           const cleanText = cleanSubtitleText(text);
           if (cleanText && cleanText.trim().length > 0) {
-            srtContent += `${index}\n`;
-            srtContent += `${startTime} --> ${endTime}\n`;
-            srtContent += `${cleanText}\n\n`;
-            index++;
+            subtitleEntries.push({
+              startTime: Math.max(0, startSeconds),
+              endTime: endSeconds,
+              text: cleanText
+            });
           }
         }
+      }
+      
+      // 确保时间戳不重叠：上一句消失后再显示下一句
+      for (let i = 0; i < subtitleEntries.length; i++) {
+        const entry = subtitleEntries[i];
+        let endTime = entry.endTime;
+        
+        // 如果下一句存在且开始时间早于当前句的结束时间，调整当前句的结束时间
+        if (i < subtitleEntries.length - 1) {
+          const nextStartTime = subtitleEntries[i + 1].startTime;
+          if (endTime > nextStartTime) {
+            endTime = nextStartTime;
+          }
+        }
+        
+        // 确保结束时间大于开始时间
+        if (endTime <= entry.startTime) {
+          endTime = entry.startTime + 0.1; // 至少显示0.1秒
+        }
+        
+        srtContent += `${index}\n`;
+        srtContent += `${formatSRTTime(entry.startTime)} --> ${formatSRTTime(endTime)}\n`;
+        srtContent += `${wrapSubtitleText(entry.text)}\n\n`;
+        index++;
       }
     }
     
@@ -3003,7 +3083,7 @@ function convertAsrResultToSRT(resultText) {
             
             srtContent += `${index}\n`;
             srtContent += `${startTime} --> ${endTime}\n`;
-            srtContent += `${cleanSentence}\n\n`;
+            srtContent += `${wrapSubtitleText(cleanSentence)}\n\n`;
             index++;
           }
         }
@@ -3356,6 +3436,135 @@ function cleanSubtitleText(text) {
   return cleaned;
 }
 
+// 智能换行字幕文本，确保不超出屏幕宽度
+// 对于720宽度的视频，左右各50像素边距，可用宽度620像素
+// 字体大小8，中文字符约8-10像素宽，每行最多约30-35个中文字符
+// 英文按单词分割，不分开单词
+function wrapSubtitleText(text, maxCharsPerLine = 32) {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+  
+  const trimmed = text.trim();
+  if (trimmed.length <= maxCharsPerLine) {
+    return trimmed;
+  }
+  
+  // 检测是否包含英文（包含字母和空格）
+  const hasEnglish = /[a-zA-Z]/.test(trimmed);
+  
+  if (hasEnglish) {
+    // 英文或中英混合：按单词和标点分割
+    const lines = [];
+    let currentLine = '';
+    
+    // 按空格、标点符号分割（保留分隔符）
+    const tokens = trimmed.split(/(\s+|[，。！？、；：,.!?;:])/);
+    
+    for (const token of tokens) {
+      if (!token) continue;
+      
+      // 如果是空格或标点
+      if (/^[\s，。！？、；：,.!?;:]+$/.test(token)) {
+        // 如果加上这个空格/标点后不超过限制，添加到当前行
+        if (currentLine.length + token.length <= maxCharsPerLine) {
+          currentLine += token;
+        } else {
+          // 当前行已满，换行
+          if (currentLine.trim()) {
+            lines.push(currentLine.trim());
+          }
+          currentLine = token;
+        }
+      } else {
+        // 如果是单词或中文片段
+        const tokenLength = token.length;
+        
+        // 如果单个token就超过限制（极长的单词），需要强制分割
+        if (tokenLength > maxCharsPerLine) {
+          if (currentLine.trim()) {
+            lines.push(currentLine.trim());
+            currentLine = '';
+          }
+          // 强制分割长token
+          let remaining = token;
+          while (remaining.length > maxCharsPerLine) {
+            lines.push(remaining.substring(0, maxCharsPerLine));
+            remaining = remaining.substring(maxCharsPerLine);
+          }
+          currentLine = remaining;
+        } else if (currentLine.length + tokenLength <= maxCharsPerLine) {
+          // 可以添加到当前行
+          currentLine += token;
+        } else {
+          // 当前行已满，换行
+          if (currentLine.trim()) {
+            lines.push(currentLine.trim());
+          }
+          currentLine = token;
+        }
+      }
+    }
+    
+    if (currentLine.trim()) {
+      lines.push(currentLine.trim());
+    }
+    
+    return lines.join('\\N');
+  } else {
+    // 纯中文：按标点符号优先分割
+    const punctuation = /[，。！？、；：]/;
+    const lines = [];
+    let currentLine = '';
+    
+    const segments = trimmed.split(/([，。！？、；：])/);
+    
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      if (!segment) continue;
+      
+      if (punctuation.test(segment)) {
+        currentLine += segment;
+        if (currentLine.length > maxCharsPerLine) {
+          if (currentLine.length > maxCharsPerLine * 2) {
+            const mid = Math.floor(currentLine.length / 2);
+            lines.push(currentLine.substring(0, mid));
+            currentLine = currentLine.substring(mid);
+          } else {
+            lines.push(currentLine);
+            currentLine = '';
+          }
+        }
+      } else {
+        if (currentLine.length + segment.length <= maxCharsPerLine) {
+          currentLine += segment;
+        } else {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = '';
+          }
+          if (segment.length > maxCharsPerLine) {
+            let remaining = segment;
+            while (remaining.length > maxCharsPerLine) {
+              lines.push(remaining.substring(0, maxCharsPerLine));
+              remaining = remaining.substring(maxCharsPerLine);
+            }
+            currentLine = remaining;
+          } else {
+            currentLine = segment;
+          }
+        }
+      }
+    }
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines.join('\\N');
+  }
+}
+
 router.post('/content/:contentId/generate-video', async (req, res) => {
   // 立即设置CORS头，确保长时间运行的请求也能正确返回CORS响应
   const origin = req.headers.origin;
@@ -3428,7 +3637,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     const { audioUrl, language = 'zh' } = req.body;
 
     console.log(`📝 开始处理${language === 'zh' ? '中文' : '英文'}视频生成，ContentId: ${contentId}`);
-    sendProgress(`开始处理${language === 'zh' ? '中文' : '英文'}视频生成`, 5);
+    sendProgress(`Step 1: Preparing to generate audio and subtitles`, 5);
 
     // 获取内容信息
     let contentObj;
@@ -3516,7 +3725,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     await contentObj.save();
 
     console.log(`📝 开始生成${language === 'zh' ? '中文' : '英文'}视频（使用博客封面图）`);
-    sendProgress('准备生成视频', 10);
+    sendProgress('Step 1: Downloading audio file', 10);
 
     const tempDir = os.tmpdir();
     const timestamp = Date.now();
@@ -3551,7 +3760,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     console.log('📥 开始下载音频');
     console.log('📥 原始URL:', finalAudioUrl);
     console.log('📥 处理后的URL:', audioUrlToFetch);
-    sendProgress('正在下载音频文件', 15);
+    sendProgress('Step 1: Downloading audio file', 15);
     
     let audioResponse;
     try {
@@ -3649,7 +3858,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     
     const audioDurationSeconds = Math.ceil(audioDuration);
     console.log('📊 音频总时长:', audioDurationSeconds, '秒');
-    sendProgress('正在生成字幕文件', 30);
+    sendProgress('Step 1: Generating subtitle file', 30);
     
     // 使用腾讯云ASR生成字幕文件（基于音频URL）
     // 确保音频URL是HTTPS格式
@@ -3666,7 +3875,15 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       contentId,
       timestamp
     );
-    sendProgress('字幕生成完成', 40);
+    
+    if (tempSubtitlePath) {
+      console.log('✅ 字幕文件生成成功，路径:', tempSubtitlePath);
+      sendProgress('Step 1: Subtitle generation completed', 40);
+    } else {
+      console.warn('⚠️ 字幕生成失败，视频将继续生成但不包含字幕');
+      console.warn('⚠️ 请检查：1. 腾讯云ASR配置是否正确 2. 音频URL是否可访问 3. 查看上方错误日志');
+      sendProgress('Step 1: Subtitle generation failed, continuing without subtitles', 40);
+    }
     
     // 下载博客封面图
     console.log('📥 开始下载博客封面图:', blogCoverUrl);
@@ -3694,7 +3911,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     const coverImagePath = path.join(tempDir, `cover_${contentId}_${timestamp}.jpg`);
     await fs.writeFile(coverImagePath, coverImageBuffer);
     console.log('✅ 博客封面图保存完成');
-    sendProgress('封面图下载完成', 50);
+    sendProgress('Step 2: Cover image downloaded', 50);
     
     // 视频参数（9:16比例，720x1280）
     const videoWidth = 720;
@@ -3704,7 +3921,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     // 使用ffmpeg将博客封面图转换为视频（静态图片，匹配音频时长）
     tempVideoPath = path.join(tempDir, `video_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始生成视频（使用博客封面图）');
-    sendProgress('正在生成视频', 55);
+    sendProgress('Step 2: Generating video', 55);
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
@@ -3759,7 +3976,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     // 合并视频和音频（如果有字幕则嵌入字幕）
     tempOutputPath = path.join(tempDir, `output_${contentId}_${language}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频' + (tempSubtitlePath ? '（包含字幕）' : ''));
-    sendProgress('正在合并视频和音频', 75);
+    sendProgress('Step 2: Merging and compositing video', 75);
     
     // 如果有字幕文件，先验证文件是否存在
     if (tempSubtitlePath) {
@@ -3786,6 +4003,14 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       // 如果有字幕文件，添加字幕滤镜
       if (tempSubtitlePath) {
         console.log('📝 添加字幕到视频:', tempSubtitlePath);
+        // 验证字幕文件是否存在
+        const fs = require('fs');
+        if (!fs.existsSync(tempSubtitlePath)) {
+          console.error('❌ 字幕文件不存在:', tempSubtitlePath);
+          throw new Error(`字幕文件不存在: ${tempSubtitlePath}`);
+        }
+        const subtitleStats = fs.statSync(tempSubtitlePath);
+        console.log('✅ 字幕文件存在，大小:', subtitleStats.size, '字节');
         const escapedSubtitlePath = escapeSubtitlePath(tempSubtitlePath);
         console.log('📝 转义后的字幕路径:', escapedSubtitlePath);
         
@@ -3796,14 +4021,19 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             // 添加字幕（硬字幕，烧录到视频帧上）
             // 显式指定输入编码为UTF-8，确保中文字幕正确显示
             // 字幕文件已使用UTF-8 BOM编码，但显式指定charenc参数更可靠
-            // 字幕样式：去掉阴影，边框变细，位置居中（底部），确保在屏幕内
+            // 字幕样式：白色文字，无阴影，中灰色描边，位置居中（画面正中心偏下），确保在屏幕内
+            // PrimaryColour=&Hffffff：白色文字
             // Outline=1：细边框
             // Shadow=0：无阴影效果
-            // Alignment=2：底部居中
-            // WrapStyle=0：智能换行，确保长文本自动换行不超出屏幕
-            // MarginL=20,MarginR=20：左右边距，确保字幕不超出屏幕边界
-            // MarginV=400：垂直边距，让字幕在作者名称底部的透明层上方，适配不同手机尺寸（透明层高度约140-160px，加上间距确保在各种尺寸手机上都在透明层上方）
-            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=400,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+            // OutlineColour=&H606060：深灰色描边
+            // Alignment=5：画面正中心（锚点在正中心）
+            // WrapStyle=0：智能换行，长文本自动换行不超出屏幕（更激进的换行策略）
+            // MarginL=50,MarginR=50：左右边距50像素，确保字幕不超出屏幕边界（720宽度，可用620）
+            // MarginV=80：垂直边距80像素，让字幕从中心往下移动，位置固定不变
+            // 注意：force_style参数值使用单引号包裹，内部不需要转义（FFmpeg会自动处理）
+            // FontSize=8：字体大小8
+            // OutlineColour=&H606060：深灰色描边
+            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H606060,Outline=1,Shadow=0,Alignment=5,MarginL=50,MarginR=50,MarginV=80,WrapStyle=0'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -3833,15 +4063,42 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             reject(new Error('视频合并超时，请重试'));
           }, timeout);
         })
+        .on('stderr', (stderrLine) => {
+          // 记录所有stderr输出，特别是错误和警告
+          const line = stderrLine.trim();
+          // 优先记录字幕相关的所有输出
+          if (line.includes('Parsed_subtitles') || line.includes('libass') || line.includes('fontselect') || 
+              line.includes('Glyph') || line.includes('ASS') || line.includes('subtitles') || 
+              line.includes('Subtitle') || line.includes('字幕') || line.includes('font') || 
+              line.includes('Font') || line.includes('字体')) {
+            console.warn('⚠️ FFmpeg字幕相关:', line);
+          } else if (line.includes('time=')) {
+            console.log('📊 FFmpeg进度:', line);
+          } else if (line.includes('error') || line.includes('Error') || line.includes('ERROR') || 
+                     line.includes('warning') || line.includes('Warning') || line.includes('WARNING')) {
+            console.warn('⚠️ FFmpeg stderr:', line);
+          } else if (line.length > 0 && !line.match(/^frame=\s*\d+/) && 
+                     !line.match(/^Stream mapping/) && !line.match(/^Press \[q\]/) &&
+                     !line.match(/^\[libx264\]/) && !line.match(/^\[Parsed_scale/) &&
+                     !line.match(/^\[Parsed_pad/) && !line.match(/^Output #0/) &&
+                     !line.match(/^\[out#/) && !line.match(/^\[libx264 @/) &&
+                     !line.match(/^configuration:/) && !line.match(/^Input #/) &&
+                     !line.match(/^Duration:/) && !line.match(/^Stream #/)) {
+            // 记录其他非进度信息（排除常见的进度和状态行）
+            console.log('📝 FFmpeg输出:', line);
+          }
+        })
         .on('end', () => {
           if (timeoutId) clearTimeout(timeoutId);
           console.log('✅ 视频合并完成');
-          sendProgress('视频合并完成', 85);
+          sendProgress('Step 2: Video merge completed', 85);
           resolve(null);
         })
         .on('error', (err) => {
           if (timeoutId) clearTimeout(timeoutId);
           console.error('❌ FFmpeg合并失败:', err);
+          console.error('❌ FFmpeg错误详情:', err.message);
+          console.error('❌ FFmpeg错误堆栈:', err.stack);
           // 如果copy失败，尝试重新编码
           if (err.message && err.message.includes('copy')) {
             console.log('⚠️ 视频流复制失败，尝试重新编码...');
@@ -3855,7 +4112,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=400,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H606060,Outline=1,Shadow=0,Alignment=5,MarginV=80,MarginL=50,MarginR=50,WrapStyle=0'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -3883,7 +4140,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
             fallbackProcess = fallbackProcess.output(tempOutputPath)
               .on('end', () => {
                 console.log('✅ 视频合并完成（使用重新编码）');
-                sendProgress('视频合并完成', 85);
+                sendProgress('Step 2: Video merge completed', 85);
                 resolve(null);
               })
               .on('error', (fallbackErr) => {
@@ -3899,13 +4156,13 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     });
     
     // 上传合并后的视频到LeanCloud
-    sendProgress('正在上传视频', 90);
+    sendProgress('Step 2: Uploading video', 90);
     const outputBuffer = await fs.readFile(tempOutputPath);
     const videoFile = new AV.File(`video_${contentId}_${language}_${timestamp}.mp4`, outputBuffer, 'video/mp4');
     await videoFile.save();
     const finalVideoUrl = videoFile.url();
     console.log('✅ 视频上传成功，URL:', finalVideoUrl);
-    sendProgress('视频上传完成', 95);
+    sendProgress('Step 2: Video upload completed', 95);
     
     // 更新ExtractedContent记录
     if (language === 'en') {
@@ -4811,6 +5068,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     console.log('📥 contentId:', contentId);
     
     sendProgress('开始处理英文视频生成请求', 0);
+    sendProgress('Step 1: Preparing to generate audio and subtitles', 5);
     
     // 获取内容对象
     const contentObj = await new AV.Query('ExtractedContent').get(contentId);
@@ -4861,7 +5119,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     // 如果缺少英文翻译，使用Deepseek翻译
     if (!chapterTitleEn || !summaryEn) {
       console.log('🌐 开始使用Deepseek翻译内容...');
-      sendProgress('正在翻译内容为英文', 10);
+      sendProgress('Step 1: Translating content to English', 10);
       
       // 翻译标题
       if (!chapterTitleEn && chapterTitle) {
@@ -4990,9 +5248,13 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       openingTextEn = middleOpeningsEn[segmentIndexEn % middleOpeningsEn.length];
     }
     
-    // 在文本前添加开场白
+    // 在文本前添加开场白（强制添加开场白）
     let audioText = `${summaryEn}`.trim();
-    const finalAudioText = openingTextEn ? `${openingTextEn}${audioText}` : audioText;
+    // 强制添加开场白，不管文本是否已经包含
+    if (openingTextEn && openingTextEn.trim()) {
+      audioText = `${openingTextEn.trim()}${audioText}`;
+    }
+    const finalAudioText = audioText;
     console.log(`📝 添加英文开场白，集数: ${segmentIndexEn}/${totalSegmentsEn}`);
     console.log(`📝 开场白: ${openingTextEn}`);
     console.log('📝 英文文本:', finalAudioText.substring(0, 100) + '...');
@@ -5180,6 +5442,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     }
     tempAudioPath = path.join(tempDir, `audio_en_${contentId}_${timestamp}.mp3`);
     console.log('📥 开始下载英文音频:', finalEnglishAudioUrl);
+    sendProgress('Step 1: Downloading audio file', 20);
     
     let audioResponse;
     try {
@@ -5230,6 +5493,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     }
     
     console.log('🎤 使用英文音频URL生成字幕:', audioUrlForASR);
+    sendProgress('Step 1: Generating subtitle file', 30);
     tempSubtitlePath = await generateSubtitleFile(
       audioUrlForASR,
       'en',
@@ -5237,6 +5501,15 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       contentId,
       timestamp
     );
+    
+    if (tempSubtitlePath) {
+      console.log('✅ 英文字幕文件生成成功，路径:', tempSubtitlePath);
+      sendProgress('Step 1: Subtitle generation completed', 40);
+    } else {
+      console.warn('⚠️ 英文字幕生成失败，视频将继续生成但不包含字幕');
+      console.warn('⚠️ 请检查：1. 腾讯云ASR配置是否正确 2. 音频URL是否可访问 3. 查看上方错误日志');
+      sendProgress('Step 1: Subtitle generation failed, continuing without subtitles', 40);
+    }
     
     // 下载博客封面图
     console.log('📥 开始下载博客封面图:', blogCoverUrl);
@@ -5264,6 +5537,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     const coverImagePath = path.join(tempDir, `cover_en_${contentId}_${timestamp}.jpg`);
     await fs.writeFile(coverImagePath, coverImageBuffer);
     console.log('✅ 博客封面图保存完成');
+    sendProgress('Step 2: Cover image downloaded', 50);
     
     // 视频参数（9:16比例，720x1280）
     const videoWidth = 720;
@@ -5273,6 +5547,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     // 使用ffmpeg将博客封面图转换为视频（静态图片，匹配音频时长）
     tempVideoPath = path.join(tempDir, `video_en_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始生成英文视频（使用博客封面图）');
+    sendProgress('Step 2: Generating video', 55);
     
     await new Promise((resolve, reject) => {
       let timeoutId = null;
@@ -5326,6 +5601,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     // 合并视频和音频
     tempOutputPath = path.join(tempDir, `output_en_${contentId}_${timestamp}.mp4`);
     console.log('🎞️ 开始合并视频和音频');
+    sendProgress('Step 2: Merging and compositing video', 75);
     
     let finalVideoPath = tempVideoPath;
     // 使用更严格的比较，考虑浮点数误差，如果视频时长 < 音频时长（即使只差0.1秒），也需要拼接
@@ -5524,6 +5800,14 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       // 如果有字幕文件，添加字幕滤镜
       if (tempSubtitlePath) {
         console.log('📝 添加字幕到视频:', tempSubtitlePath);
+        // 验证字幕文件是否存在
+        const fs = require('fs');
+        if (!fs.existsSync(tempSubtitlePath)) {
+          console.error('❌ 字幕文件不存在:', tempSubtitlePath);
+          throw new Error(`字幕文件不存在: ${tempSubtitlePath}`);
+        }
+        const subtitleStats = fs.statSync(tempSubtitlePath);
+        console.log('✅ 字幕文件存在，大小:', subtitleStats.size, '字节');
         const escapedSubtitlePath = escapeSubtitlePath(tempSubtitlePath);
         console.log('📝 转义后的字幕路径:', escapedSubtitlePath);
         
@@ -5534,14 +5818,19 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
             // 添加字幕（硬字幕，烧录到视频帧上）
             // 显式指定输入编码为UTF-8，确保中文字幕正确显示
             // 字幕文件已使用UTF-8 BOM编码，但显式指定charenc参数更可靠
-            // 字幕样式：去掉阴影，边框变细，位置居中（底部），确保在屏幕内
+            // 字幕样式：白色文字，无阴影，中灰色描边，位置居中（画面正中心偏下），确保在屏幕内
+            // PrimaryColour=&Hffffff：白色文字
             // Outline=1：细边框
             // Shadow=0：无阴影效果
-            // Alignment=2：底部居中
-            // WrapStyle=0：智能换行，确保长文本自动换行不超出屏幕
-            // MarginL=20,MarginR=20：左右边距，确保字幕不超出屏幕边界
-            // MarginV=400：垂直边距，让字幕在作者名称底部的透明层上方，适配不同手机尺寸（透明层高度约140-160px，加上间距确保在各种尺寸手机上都在透明层上方）
-            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=400,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+            // OutlineColour=&H606060：深灰色描边
+            // Alignment=5：画面正中心（锚点在正中心）
+            // WrapStyle=0：智能换行，长文本自动换行不超出屏幕（更激进的换行策略）
+            // MarginL=50,MarginR=50：左右边距50像素，确保字幕不超出屏幕边界（720宽度，可用620）
+            // MarginV=80：垂直边距80像素，让字幕从中心往下移动，位置固定不变
+            // 注意：force_style参数值使用单引号包裹，内部不需要转义（FFmpeg会自动处理）
+            // FontSize=8：字体大小8
+            // OutlineColour=&H606060：深灰色描边
+            `[v]subtitles='${escapedSubtitlePath}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H606060,Outline=1,Shadow=0,Alignment=5,MarginL=50,MarginR=50,MarginV=80,WrapStyle=0'[outv]`
           ])
           .outputOptions([
             '-map', '[outv]',
@@ -5571,14 +5860,42 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
             reject(new Error('视频合并超时，请重试'));
           }, timeout);
         })
+        .on('stderr', (stderrLine) => {
+          // 记录所有stderr输出，特别是错误和警告
+          const line = stderrLine.trim();
+          // 优先记录字幕相关的所有输出
+          if (line.includes('Parsed_subtitles') || line.includes('libass') || line.includes('fontselect') || 
+              line.includes('Glyph') || line.includes('ASS') || line.includes('subtitles') || 
+              line.includes('Subtitle') || line.includes('字幕') || line.includes('font') || 
+              line.includes('Font') || line.includes('字体')) {
+            console.warn('⚠️ FFmpeg字幕相关:', line);
+          } else if (line.includes('time=')) {
+            console.log('📊 FFmpeg进度:', line);
+          } else if (line.includes('error') || line.includes('Error') || line.includes('ERROR') || 
+                     line.includes('warning') || line.includes('Warning') || line.includes('WARNING')) {
+            console.warn('⚠️ FFmpeg stderr:', line);
+          } else if (line.length > 0 && !line.match(/^frame=\s*\d+/) && 
+                     !line.match(/^Stream mapping/) && !line.match(/^Press \[q\]/) &&
+                     !line.match(/^\[libx264\]/) && !line.match(/^\[Parsed_scale/) &&
+                     !line.match(/^\[Parsed_pad/) && !line.match(/^Output #0/) &&
+                     !line.match(/^\[out#/) && !line.match(/^\[libx264 @/) &&
+                     !line.match(/^configuration:/) && !line.match(/^Input #/) &&
+                     !line.match(/^Duration:/) && !line.match(/^Stream #/)) {
+            // 记录其他非进度信息（排除常见的进度和状态行）
+            console.log('📝 FFmpeg输出:', line);
+          }
+        })
         .on('end', () => {
           if (timeoutId) clearTimeout(timeoutId);
           console.log('✅ 视频合并完成');
+          sendProgress('Step 2: Video merge completed', 85);
           resolve(null);
         })
         .on('error', (err) => {
           if (timeoutId) clearTimeout(timeoutId);
           console.error('❌ FFmpeg合并失败:', err);
+          console.error('❌ FFmpeg错误详情:', err.message);
+          console.error('❌ FFmpeg错误堆栈:', err.stack);
           // 如果copy失败，尝试重新编码
           if (err.message && err.message.includes('copy')) {
             console.log('⚠️ 视频流复制失败，尝试重新编码...');
@@ -5591,7 +5908,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               fallbackProcess = fallbackProcess
                 .complexFilter([
                   `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black[v]`,
-                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=1,Shadow=0,Alignment=2,MarginV=400,MarginL=20,MarginR=20,WrapStyle=0'[outv]`
+                  `[v]subtitles='${escapeSubtitlePath(tempSubtitlePath)}':charenc=UTF-8:force_style='FontSize=8,PrimaryColour=&Hffffff,OutlineColour=&H606060,Outline=1,Shadow=0,Alignment=5,MarginV=80,MarginL=50,MarginR=50,WrapStyle=0'[outv]`
                 ])
                 .outputOptions([
                   '-map', '[outv]',
@@ -5635,6 +5952,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     
     // 上传合并后的视频到LeanCloud
     console.log('📤 开始上传英文视频到LeanCloud...');
+    sendProgress('Step 2: Uploading video', 90);
     const videoBuffer2 = await fs.readFile(tempOutputPath);
     const fileSizeMB = (videoBuffer2.length / 1024 / 1024).toFixed(2);
     console.log(`📊 视频文件大小: ${fileSizeMB}MB`);
@@ -5653,6 +5971,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       const uploadTime = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
     const finalVideoUrl = videoFile.url();
       console.log(`✅ 英文视频上传成功，耗时: ${uploadTime}秒，URL:`, finalVideoUrl);
+      sendProgress('Step 2: Video upload completed', 95);
     } catch (error) {
       console.error('❌ 英文视频上传失败:', error);
       console.error('错误详情:', error.message);
