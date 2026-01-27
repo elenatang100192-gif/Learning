@@ -3,7 +3,7 @@ import { VideoFeed } from './VideoFeed';
 import { NotificationCenter } from './NotificationCenter';
 import { useLanguage } from '../contexts/LanguageContext';
 
-type Category = 'Tech' | 'Arts' | 'Business';
+type Category = 'Tech' | 'Culture' | 'Business';
 
 interface HomeProps {
   userEmail?: string | null;
@@ -16,7 +16,7 @@ export function Home({ userEmail }: HomeProps = {}) {
 
   const categories: { id: Category; label: string }[] = [
     { id: 'Tech', label: t.tech },
-    { id: 'Arts', label: t.arts },
+    { id: 'Culture', label: t.arts },
     { id: 'Business', label: t.business },
   ];
 

@@ -3,7 +3,7 @@ export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 export interface Publication {
   id: string;
   title: string;
-  category: 'Tech' | 'Arts' | 'Business';
+  category: 'Tech' | 'Culture' | 'Business';
   thumbnail: string;
   videoUrl: string;
   status: ReviewStatus;

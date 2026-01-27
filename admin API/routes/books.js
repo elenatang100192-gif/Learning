@@ -2834,12 +2834,17 @@ function convertAsrResultToSRT(resultText) {
       
       // 尝试提取words数组（包含时间戳的单词）
       if (parsedData.words && Array.isArray(parsedData.words)) {
-        // 直接使用ASR返回的单词时间戳，完全按照音频时间同步，不限制字数
-        // 只根据时间间隔来分段，确保字幕与音频完全同步
+        // 按照标点符号分段，同时保证音频和字幕完全同步
+        // 使用ASR返回的单词时间戳，完全按照音频时间同步
         const subtitleBlocks = [];
         let currentBlock = { words: [], startTime: null, endTime: null };
-        const MAX_TIME_GAP = 1.2; // 如果单词间隔超过1.2秒，开始新的字幕块（增加间隔以减少每屏字数）
-        const MAX_WORDS_PER_BLOCK = 5; // 每块最多5个单词，进一步减少每屏字幕数量
+        const MAX_TIME_GAP = 2.0; // 如果单词间隔超过2.0秒，也分段（作为备用规则）
+        const MAX_CHARS_PER_BLOCK = 84; // 每块最多84字符，严格控制不超过3行（每行28字符，3行约84字符）
+        
+        // 定义句子结束标点符号（英文和中文）
+        const sentenceEndPunctuation = /[.!?。！？]/;
+        // 定义其他标点符号（逗号、分号等，也可以作为分段点）
+        const otherPunctuation = /[,;，；：:]/;
         
         for (let i = 0; i < parsedData.words.length; i++) {
           const word = parsedData.words[i];
@@ -2847,44 +2852,63 @@ function convertAsrResultToSRT(resultText) {
           const wordEndTime = word.end_time !== undefined ? word.end_time / 1000 : null;
           const wordText = word.word || word.text || '';
           
-          // 检查是否需要开始新的字幕块（仅根据时间间隔，不限制字数）
-          if (currentBlock.words.length > 0) {
-            const timeGap = wordStartTime !== null && currentBlock.endTime !== null 
-              ? wordStartTime - currentBlock.endTime 
-              : 0;
-            
-            // 如果单词间隔太大，或者当前块单词数已达到上限，开始新块
-            if (timeGap > MAX_TIME_GAP || currentBlock.words.length >= MAX_WORDS_PER_BLOCK) {
-              if (currentBlock.words.length > 0 && currentBlock.startTime !== null) {
-                subtitleBlocks.push({
-                  text: currentBlock.words.join(''),
-                  startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
-                  endTime: currentBlock.endTime || 0
-                });
-              }
-              currentBlock = { words: [], startTime: null, endTime: null };
+          if (wordText.trim().length === 0) {
+            continue;
+          }
+          
+          // 检查当前单词是否包含标点符号
+          const hasSentenceEndPunct = sentenceEndPunctuation.test(wordText);
+          const hasOtherPunct = otherPunctuation.test(wordText);
+          
+          // 计算添加当前单词后的总字符数（包括空格）
+          const currentText = currentBlock.words.join('');
+          const newText = currentText + (currentText ? ' ' : '') + wordText;
+          const newTextLength = newText.length;
+          
+          // 检查是否需要开始新的字幕块（在添加当前单词之前）
+          // 注意：标点符号分段在添加单词后处理，这里只处理字符数和时间间隔
+          let shouldStartNewBlock = false;
+          
+          // 1. 如果字符数超过限制，分段
+          if (newTextLength > MAX_CHARS_PER_BLOCK && currentBlock.words.length > 0) {
+            shouldStartNewBlock = true;
+          }
+          // 2. 如果时间间隔太大，分段（备用规则）
+          else if (currentBlock.words.length > 0 && currentBlock.endTime !== null && wordStartTime !== null) {
+            const timeGap = wordStartTime - currentBlock.endTime;
+            if (timeGap > MAX_TIME_GAP) {
+              shouldStartNewBlock = true;
             }
           }
           
+          // 如果需要开始新块（字符数或时间间隔），先保存当前块
+          if (shouldStartNewBlock && currentBlock.words.length > 0 && currentBlock.startTime !== null) {
+            subtitleBlocks.push({
+              text: currentBlock.words.join(''),
+              startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
+              endTime: currentBlock.endTime || 0
+            });
+            currentBlock = { words: [], startTime: null, endTime: null };
+          }
+          
           // 添加单词到当前块
-          if (wordText.trim().length > 0) {
-            // 如果当前块已满，先保存当前块再开始新块
-            if (currentBlock.words.length >= MAX_WORDS_PER_BLOCK && currentBlock.startTime !== null) {
-              subtitleBlocks.push({
-                text: currentBlock.words.join(''),
-                startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
-                endTime: currentBlock.endTime || 0
-              });
-              currentBlock = { words: [], startTime: null, endTime: null };
-            }
-            
-            if (currentBlock.startTime === null && wordStartTime !== null) {
-              currentBlock.startTime = wordStartTime;
-            }
-            if (wordEndTime !== null) {
-              currentBlock.endTime = wordEndTime;
-            }
-            currentBlock.words.push(wordText);
+          if (currentBlock.startTime === null && wordStartTime !== null) {
+            currentBlock.startTime = wordStartTime;
+          }
+          if (wordEndTime !== null) {
+            currentBlock.endTime = wordEndTime;
+          }
+          currentBlock.words.push(wordText);
+          
+          // 如果当前单词包含句子结束标点符号，立即分段（在添加单词后）
+          // 这样可以确保标点符号包含在当前块的末尾
+          if (hasSentenceEndPunct && currentBlock.words.length > 0 && currentBlock.startTime !== null) {
+            subtitleBlocks.push({
+              text: currentBlock.words.join(''),
+              startTime: Math.max(0, currentBlock.startTime - SUBTITLE_ADVANCE_TIME),
+              endTime: currentBlock.endTime || 0
+            });
+            currentBlock = { words: [], startTime: null, endTime: null };
           }
         }
         
@@ -3440,7 +3464,7 @@ function cleanSubtitleText(text) {
 // 对于720宽度的视频，左右各50像素边距，可用宽度620像素
 // 字体大小8，中文字符约8-10像素宽，每行最多约30-35个中文字符
 // 英文按单词分割，不分开单词
-function wrapSubtitleText(text, maxCharsPerLine = 32) {
+function wrapSubtitleText(text, maxCharsPerLine = 28) {
   if (!text || typeof text !== 'string') {
     return '';
   }

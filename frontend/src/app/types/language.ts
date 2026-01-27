@@ -166,7 +166,7 @@ export const translations: Record<Language, Translations> = {
     
     // 分类
     tech: 'Tech',
-    arts: 'Arts',
+    arts: 'Culture',
     business: 'Business',
     
     // 登录页面

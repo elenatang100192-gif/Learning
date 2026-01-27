@@ -45,7 +45,7 @@ async function createCategories() {
     try {
         const categories = [
             { name: 'Tech', nameCn: '科技', sortOrder: 1 },
-            { name: 'Arts', nameCn: '艺术人文', sortOrder: 2 },
+            { name: 'Culture', nameCn: '艺术人文', sortOrder: 2 },
             { name: 'Business', nameCn: '商业业务', sortOrder: 3 }
         ];
 
@@ -93,7 +93,7 @@ async function createSampleBooks() {
                 title: '百年孤独',
                 author: '加西亚·马尔克斯',
                 isbn: '9787532768849',
-                category: 'arts',
+                category: 'culture',
                 description: '魔幻现实主义文学巅峰之作，讲述布恩迪亚家族七代人的传奇故事'
             },
             {
@@ -157,7 +157,7 @@ async function createSampleVideos() {
             {
                 title: '魔幻现实主义解析',
                 titleEn: 'Analysis of Magical Realism',
-                category: 'arts',
+                category: 'culture',
                 duration: 240,
                 description: '文学分析：百年孤独中的魔幻现实主义手法'
             },

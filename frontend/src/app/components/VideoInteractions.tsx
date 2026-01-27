@@ -12,7 +12,7 @@ interface Video {
   avatar: string;
   thumbnail: string;
   videoUrl: string;
-  category: 'Tech' | 'Arts' | 'Business';
+  category: 'Tech' | 'Culture' | 'Business';
   likes: number;
   comments: number;
   shares: number;

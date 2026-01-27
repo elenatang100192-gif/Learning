@@ -14,7 +14,7 @@ interface Video {
   thumbnail: string;
   videoUrl: string;
   videoUrlEn?: string | null; // 添加英文视频URL字段
-  category: 'Tech' | 'Arts' | 'Business';
+  category: 'Tech' | 'Culture' | 'Business';
   likes: number;
   comments: number;
   shares: number;

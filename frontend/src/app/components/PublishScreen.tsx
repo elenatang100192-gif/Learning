@@ -47,7 +47,7 @@ function PublishForm({ user, onClose, onSubmit, setStep }: PublishFormProps) {
   const { t, language } = useLanguage();
   const [title, setTitle] = useState('');
   const [titleEn, setTitleEn] = useState('');
-  const [category, setCategory] = useState<'Tech' | 'Arts' | 'Business'>('Tech');
+  const [category, setCategory] = useState<'Tech' | 'Culture' | 'Business'>('Tech');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string>('');
@@ -110,7 +110,7 @@ function PublishForm({ user, onClose, onSubmit, setStep }: PublishFormProps) {
       const categoriesData = await categoryAPI.getAll();
       const categoryMap: { [key: string]: string } = {
         'Tech': '科技',
-        'Arts': '艺术人文',
+        'Culture': '艺术人文',
         'Business': '商业业务'
       };
       const categoryName = categoryMap[category];
@@ -161,7 +161,7 @@ function PublishForm({ user, onClose, onSubmit, setStep }: PublishFormProps) {
 
   const categories = [
     { id: 'Tech', label: t.tech, icon: '💻' },
-    { id: 'Arts', label: t.arts, icon: '🎨' },
+    { id: 'Culture', label: t.arts, icon: '🎨' },
     { id: 'Business', label: t.business, icon: '💼' },
   ];
 
@@ -308,7 +308,7 @@ function PublishForm({ user, onClose, onSubmit, setStep }: PublishFormProps) {
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setCategory(cat.id as 'Tech' | 'Arts' | 'Business')}
+                onClick={() => setCategory(cat.id as 'Tech' | 'Culture' | 'Business')}
                 className={`p-4 rounded-xl border-2 transition-all ${
                   category === cat.id
                     ? 'bg-orange-600 border-orange-600 text-white'

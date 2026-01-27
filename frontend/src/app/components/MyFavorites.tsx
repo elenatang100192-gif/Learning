@@ -19,7 +19,7 @@ interface FrontendVideo {
   thumbnail: string;
   videoUrl: string;
   videoUrlEn?: string | null;
-  category: 'Tech' | 'Arts' | 'Business';
+  category: 'Tech' | 'Culture' | 'Business';
   likes: number;
   comments: number;
   shares: number;
@@ -38,9 +38,9 @@ export function MyFavorites({ user, onBack }: MyFavoritesProps) {
   // 将LeanCloud数据转换为前端格式
   const convertToFrontendVideo = async (leanCloudVideo: LeanCloudVideo): Promise<FrontendVideo> => {
     // 转换分类
-    const categoryMap: { [key: string]: 'Tech' | 'Arts' | 'Business' } = {
+    const categoryMap: { [key: string]: 'Tech' | 'Culture' | 'Business' } = {
       '科技': 'Tech',
-      '艺术人文': 'Arts',
+      '艺术人文': 'Culture',
       '商业业务': 'Business'
     };
 

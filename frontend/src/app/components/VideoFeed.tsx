@@ -16,7 +16,7 @@ interface FrontendVideo {
   thumbnail: string;
   videoUrl: string;
   videoUrlEn?: string | null; // 添加英文视频URL字段
-  category: 'Tech' | 'Arts' | 'Business';
+  category: 'Tech' | 'Culture' | 'Business';
   likes: number;
   comments: number;
   shares: number;
@@ -27,7 +27,7 @@ interface FrontendVideo {
 }
 
 interface VideoFeedProps {
-  category: 'Tech' | 'Arts' | 'Business';
+  category: 'Tech' | 'Culture' | 'Business';
   showFollowButton?: boolean; // 是否显示关注按钮
 }
 
@@ -64,9 +64,9 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
     }
 
     // 转换分类
-    const categoryMap: { [key: string]: 'Tech' | 'Arts' | 'Business' } = {
+    const categoryMap: { [key: string]: 'Tech' | 'Culture' | 'Business' } = {
       '科技': 'Tech',
-      '艺术人文': 'Arts',
+      '艺术人文': 'Culture',
       '商业业务': 'Business'
     };
 
@@ -116,7 +116,7 @@ export function VideoFeed({ category, showFollowButton = false }: VideoFeedProps
         // 根据分类获取视频
         const categoryMap = {
           Tech: '科技',
-          Arts: '艺术人文',
+          Culture: '艺术人文',
           Business: '商业业务'
         };
 
