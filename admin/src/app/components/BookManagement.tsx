@@ -443,8 +443,15 @@ export function BookManagement() {
       const editedSummary = editedSummaries[content.id]?.summary;
       const finalSummary = editedSummary || content.summary || '';
       
-      // Step 1: Generate Chinese audio (if not exists, or needs regeneration, or summary was edited)
-      if (!content.audioUrl || isRegenerate || editedSummary) {
+      // Check if opening text should be included
+      const shouldIncludeOpening = includeOpeningText[content.id] !== false; // Default to true
+      
+      // Step 1: Generate Chinese audio (if not exists, or needs regeneration, or summary was edited, or opening text option changed)
+      // If user unchecks "include opening text", we need to regenerate audio even if it exists
+      // Because existing audio might contain opening text
+      const needsAudioRegeneration = !content.audioUrl || isRegenerate || editedSummary || !shouldIncludeOpening;
+      
+      if (needsAudioRegeneration) {
         setVideoProgress(prev => ({ ...prev, [progressKey]: 5 }));
         toast.info('Step 1/3: Generating Chinese audio...');
         
@@ -452,9 +459,6 @@ export function BookManagement() {
         if (!audioText) {
           throw new Error('Content text is empty, cannot generate Chinese audio');
         }
-        
-        // Check if opening text should be included
-        const shouldIncludeOpening = includeOpeningText[content.id] !== false; // Default to true
         
         setGeneratingAudioId(content.id);
         setGeneratingAudioLanguage('zh');
@@ -520,7 +524,7 @@ export function BookManagement() {
       
       // Pass custom cover image, edited summary, edited titles, and opening text option
       const edited = editedSummaries[content.id];
-      const shouldIncludeOpening = includeOpeningText[content.id] !== false; // Default to true
+      // shouldIncludeOpening is already declared above, reuse it
       const videoResult = await bookAPI.generateVideo(
         updatedContent.id,
         updatedContent.audioUrl,
@@ -2076,11 +2080,18 @@ export function BookManagement() {
                                   }
                                 }
                                 
-                                // 步骤1: 如果没有英文音频，先自动生成英文音频
+                                // Check if opening text should be included
+                                const shouldIncludeOpeningEn = includeOpeningText[`${content.id}_en`] !== false; // Default to true
+                                
+                                // 步骤1: 如果没有英文音频，或者用户取消勾选开头语，先自动生成英文音频
                                 let finalAudioUrl: string | null = null;
                                 
-                                if (!content.audioUrlEn || content.audioUrlEn.includes('myqcloud.com')) {
-                                  // 如果没有英文音频，或者URL是腾讯云临时URL（可能已过期），重新生成
+                                // If user unchecks "include opening text", we need to regenerate audio even if it exists
+                                // Because existing audio might contain opening text
+                                const needsEnglishAudioRegeneration = !content.audioUrlEn || content.audioUrlEn.includes('myqcloud.com') || !shouldIncludeOpeningEn;
+                                
+                                if (needsEnglishAudioRegeneration) {
+                                  // 如果没有英文音频，或者URL是腾讯云临时URL（可能已过期），或者用户取消勾选开头语，重新生成
                                   toast.info('Step 1/2: Generating English audio...');
                                   setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 10 }));
                                   
@@ -2098,8 +2109,8 @@ export function BookManagement() {
                                     throw new Error('English content text is empty, cannot generate English audio');
                                   }
                                   
-                                  // 生成英文音频
-                                  const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en');
+                                  // 生成英文音频（传递是否包含开头语的选项）
+                                  const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en', shouldIncludeOpeningEn);
                                   if (!audioResult || !audioResult.audioUrl) {
                                     throw new Error('生成英文音频失败：未返回有效的音频URL');
                                   }
@@ -2120,17 +2131,15 @@ export function BookManagement() {
                                   // 如果已有英文音频URL，使用它
                                   finalAudioUrl = content.audioUrlEn;
                                   
-                                  // 如果URL是腾讯云临时URL，提示并重新生成
-                                  if (finalAudioUrl.includes('myqcloud.com')) {
-                                    console.warn('⚠️ 检测到腾讯云临时URL，可能已过期，重新生成音频...');
-                                    toast.info('Detected temporary URL, regenerating audio...');
+                                  // 如果URL是腾讯云临时URL，或者用户取消勾选开头语，提示并重新生成
+                                  if (finalAudioUrl.includes('myqcloud.com') || !shouldIncludeOpeningEn) {
+                                    console.warn('⚠️ 检测到需要重新生成音频（临时URL或开头语选项变更）...');
+                                    toast.info('Regenerating audio...');
                                     setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 10 }));
                                     
                                     // Use edited summary if available
                                     const edited = editedSummaries[content.id];
                                     const audioText = `${edited?.summaryEn || content.summaryEn || ''}`.trim();
-                                    // Check if opening text should be included
-                                    const shouldIncludeOpeningEn = includeOpeningText[`${content.id}_en`] !== false; // Default to true
                                     const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en', shouldIncludeOpeningEn);
                                     if (!audioResult || !audioResult.audioUrl) {
                                       throw new Error('重新生成英文音频失败');
@@ -2163,8 +2172,7 @@ export function BookManagement() {
                                 const edited = editedSummaries[content.id];
                                 const currentBlogCoverUrl = uploadedCoverImage || blogCoverUrl || selectedBook?.blogCoverUrl;
                                 
-                                // Get opening text option for English video
-                                const shouldIncludeOpeningEn = includeOpeningText[`${content.id}_en`] !== false; // Default to true
+                                // shouldIncludeOpeningEn is already declared above, reuse it
                                 
                                 const result = await bookAPI.generateVideo(
                                   content.id, 
