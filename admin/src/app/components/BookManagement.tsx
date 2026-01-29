@@ -120,9 +120,31 @@ export function BookManagement() {
 
       setBooks(booksData);
       setCategories(categoriesData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载数据失败:', error);
-      toast.error('Failed to load data');
+      
+      // 显示更详细的错误信息
+      let errorMessage = '加载书籍数据失败';
+      
+      if (error?.message) {
+        errorMessage = `加载书籍数据失败: ${error.message}`;
+      } else if (typeof error === 'string') {
+        errorMessage = `加载书籍数据失败: ${error}`;
+      } else if (error?.error) {
+        errorMessage = `加载书籍数据失败: ${error.error}`;
+      }
+      
+      // 检查是否是网络错误
+      if (error?.name === 'TypeError' || error?.message?.includes('Failed to fetch') || error?.message?.includes('NetworkError')) {
+        errorMessage = '无法连接到服务器，请检查网络连接或确保后端服务正在运行';
+      }
+      
+      // 检查是否是LeanCloud权限错误
+      if (error?.code === 1 || error?.message?.includes('permission') || error?.message?.includes('权限')) {
+        errorMessage = '权限不足，请检查LeanCloud配置或联系管理员';
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

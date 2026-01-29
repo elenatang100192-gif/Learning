@@ -236,17 +236,32 @@ export const createQuery = (className: string) => {
 export const categoryAPI = {
   // 获取所有分类
   async getAll() {
-    initLeanCloud();
-    const query = createQuery('Category');
-    query.ascending('sortOrder');
-    const results = await query.find();
-    return results.map(item => ({
-      id: item.id,
-      name: item.get('name'),
-      nameCn: item.get('nameCn'),
-      sortOrder: item.get('sortOrder'),
-      createdAt: item.createdAt
-    })) as Category[];
+    try {
+      initLeanCloud();
+      const query = createQuery('Category');
+      query.ascending('sortOrder');
+      const results = await query.find();
+      return results.map(item => ({
+        id: item.id,
+        name: item.get('name'),
+        nameCn: item.get('nameCn'),
+        sortOrder: item.get('sortOrder'),
+        createdAt: item.createdAt
+      })) as Category[];
+    } catch (error: any) {
+      console.error('获取分类列表失败:', error);
+      
+      // 提供更详细的错误信息
+      if (error?.code === 1) {
+        throw new Error('权限不足，无法访问分类数据。请检查LeanCloud配置或联系管理员');
+      } else if (error?.code === 101) {
+        throw new Error('LeanCloud应用配置错误，请检查App ID和App Key');
+      } else if (error?.message) {
+        throw new Error(`获取分类列表失败: ${error.message}`);
+      } else {
+        throw new Error('获取分类列表失败，请检查网络连接或LeanCloud配置');
+      }
+    }
   },
 
   // 根据名称获取分类
@@ -270,51 +285,66 @@ export const categoryAPI = {
 export const bookAPI = {
   // 获取书籍列表
   async getList(filters: any = {}, page: number = 1, limit: number = 20) {
-    initLeanCloud();
-    const query = createQuery('Book');
+    try {
+      initLeanCloud();
+      const query = createQuery('Book');
 
-    // 应用筛选条件
-    if (filters.title) {
-      query.contains('title', filters.title);
-    }
-    if (filters.author) {
-      query.contains('author', filters.author);
-    }
-    if (filters.category) {
-      const category = AV.Object.createWithoutData('Category', filters.category);
-      query.equalTo('category', category);
-    }
-    if (filters.status) {
-      query.equalTo('status', filters.status);
-    }
+      // 应用筛选条件
+      if (filters.title) {
+        query.contains('title', filters.title);
+      }
+      if (filters.author) {
+        query.contains('author', filters.author);
+      }
+      if (filters.category) {
+        const category = AV.Object.createWithoutData('Category', filters.category);
+        query.equalTo('category', category);
+      }
+      if (filters.status) {
+        query.equalTo('status', filters.status);
+      }
 
-    // 分页
-    query.limit(limit);
-    query.skip((page - 1) * limit);
-    query.descending('createdAt');
+      // 分页
+      query.limit(limit);
+      query.skip((page - 1) * limit);
+      query.descending('createdAt');
 
-    // 关联查询分类信息
-    query.include('category');
+      // 关联查询分类信息
+      query.include('category');
 
-    const results = await query.find();
-    return results.map(item => ({
-      id: item.id,
-      title: item.get('title'),
-      author: item.get('author'),
-      isbn: item.get('isbn'),
-      category: item.get('category') ? {
-        id: item.get('category').id,
-        name: item.get('category').get('name'),
-        nameCn: item.get('category').get('nameCn'),
-        sortOrder: item.get('category').get('sortOrder')
-      } : undefined,
-      coverUrl: item.get('coverUrl'),
-      blogCoverUrl: item.get('blogCoverUrl'),
-      fileUrl: item.get('fileUrl'),
-      uploadDate: item.get('uploadDate'),
-      status: item.get('status'),
-      createdAt: item.createdAt
-    })) as Book[];
+      const results = await query.find();
+      return results.map(item => ({
+        id: item.id,
+        title: item.get('title'),
+        author: item.get('author'),
+        isbn: item.get('isbn'),
+        category: item.get('category') ? {
+          id: item.get('category').id,
+          name: item.get('category').get('name'),
+          nameCn: item.get('category').get('nameCn'),
+          sortOrder: item.get('category').get('sortOrder')
+        } : undefined,
+        coverUrl: item.get('coverUrl'),
+        blogCoverUrl: item.get('blogCoverUrl'),
+        fileUrl: item.get('fileUrl'),
+        uploadDate: item.get('uploadDate'),
+        status: item.get('status'),
+        createdAt: item.createdAt
+      })) as Book[];
+    } catch (error: any) {
+      console.error('获取书籍列表失败:', error);
+      
+      // 提供更详细的错误信息
+      if (error?.code === 1) {
+        throw new Error('权限不足，无法访问书籍数据。请检查LeanCloud配置或联系管理员');
+      } else if (error?.code === 101) {
+        throw new Error('LeanCloud应用配置错误，请检查App ID和App Key');
+      } else if (error?.message) {
+        throw new Error(`获取书籍列表失败: ${error.message}`);
+      } else {
+        throw new Error('获取书籍列表失败，请检查网络连接或LeanCloud配置');
+      }
+    }
   },
 
   // 创建书籍
