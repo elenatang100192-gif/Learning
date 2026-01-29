@@ -146,6 +146,7 @@
 ### AI集成
 
 - **AI内容提取**: OpenAI GPT-4 / Claude / 通义千问
+- **图像生成**: OpenAI DALL-E 3 (Azure AI Foundry) - API Key: cfbf57ca067949419e00faba7441f21f
 - **视频生成**: 通义万相 / Vidu / Seedance / 可灵
 - **文本处理**: AI生成双语标题和内容摘要
 - **崩溃监控**: Sentry / Firebase Crashlytics / Bugly

@@ -79,6 +79,17 @@ export function BookManagement() {
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState<boolean>(false);
   const [generatingPrompts, setGeneratingPrompts] = useState<boolean>(false);
 
+  // Cover image upload related state
+  const [uploadedCoverImage, setUploadedCoverImage] = useState<string | null>(null);
+  const [isUploadingCover, setIsUploadingCover] = useState<boolean>(false);
+  
+  // Edit state for each content
+  const [editingContentId, setEditingContentId] = useState<string | null>(null);
+  const [editedSummaries, setEditedSummaries] = useState<{ [contentId: string]: { summary: string; summaryEn: string; chapterTitle: string; chapterTitleEn: string } }>({});
+  
+  // Opening text option for each content (default: true - include opening text)
+  const [includeOpeningText, setIncludeOpeningText] = useState<{ [contentId: string]: boolean }>({});
+
   // 加载数据
   useEffect(() => {
     loadData();
@@ -415,7 +426,7 @@ export function BookManagement() {
     }
   };
 
-  // 生成中文视频（合并3个步骤：音频 -> 无声视频 -> 最终视频）
+  // Generate Chinese video (combines 3 steps: audio -> silent video -> final video)
   const handleGenerateChineseVideo = async (content: any) => {
     let progressInterval: NodeJS.Timeout | null = null;
     const progressKey = `${content.id}_zh_complete`;
@@ -428,22 +439,29 @@ export function BookManagement() {
       setGeneratingVideoLanguage('zh');
       setVideoProgress({ ...videoProgress, [progressKey]: 0 });
       
-      // 步骤1: 生成中文音频（如果还没有，或者需要重新生成）
-      if (!content.audioUrl || isRegenerate) {
+      // Use edited summary if available, otherwise use original
+      const editedSummary = editedSummaries[content.id]?.summary;
+      const finalSummary = editedSummary || content.summary || '';
+      
+      // Step 1: Generate Chinese audio (if not exists, or needs regeneration, or summary was edited)
+      if (!content.audioUrl || isRegenerate || editedSummary) {
         setVideoProgress(prev => ({ ...prev, [progressKey]: 5 }));
         toast.info('Step 1/3: Generating Chinese audio...');
         
-        const audioText = `${content.summary || ''}`.trim();
+        const audioText = finalSummary.trim();
         if (!audioText) {
-          throw new Error('内容文本为空，无法生成中文音频');
+          throw new Error('Content text is empty, cannot generate Chinese audio');
         }
+        
+        // Check if opening text should be included
+        const shouldIncludeOpening = includeOpeningText[content.id] !== false; // Default to true
         
         setGeneratingAudioId(content.id);
         setGeneratingAudioLanguage('zh');
         
-        const audioResult = await bookAPI.generateAudio(content.id, audioText, 'zh');
+        const audioResult = await bookAPI.generateAudio(content.id, audioText, 'zh', shouldIncludeOpening);
         if (!audioResult || !audioResult.audioUrl) {
-          throw new Error('生成中文音频失败');
+          throw new Error('Failed to generate Chinese audio');
         }
         
         setVideoProgress(prev => ({ ...prev, [progressKey]: 33 }));
@@ -464,33 +482,33 @@ export function BookManagement() {
         toast.info('Step 1 skipped: Chinese audio already exists');
       }
       
-      // 步骤2: 生成中文视频（使用博客封面图和话筒，合并音频）
+      // Step 2: Generate Chinese video (using blog cover image and microphone, merge with audio)
       setVideoProgress(prev => ({ ...prev, [progressKey]: 35 }));
       toast.info('Step 2/2: Generating video with blog cover and microphone, this may take a few minutes...');
       
-      // 检查是否有博客封面图（检查selectedBook和blogCoverUrl state）
-      const currentBlogCoverUrl = blogCoverUrl || selectedBook?.blogCoverUrl;
+      // Check if blog cover image exists (priority: uploaded > generated > book's)
+      const currentBlogCoverUrl = uploadedCoverImage || blogCoverUrl || selectedBook?.blogCoverUrl;
       if (!currentBlogCoverUrl) {
-        throw new Error('Please generate blog cover image first');
+        throw new Error('Please generate or upload blog cover image first');
       }
       
-      // 重新获取最新的content数据
+      // Reload latest content data
       const updatedContents = await bookAPI.getBookContents(selectedBook!.id);
       const updatedContent = updatedContents.find((c: any) => c.id === content.id);
       
       if (!updatedContent) {
-        console.error('❌ 无法找到更新的内容数据，contentId:', content.id);
-        throw new Error('无法找到更新的内容数据');
+        console.error('❌ Cannot find updated content data, contentId:', content.id);
+        throw new Error('Cannot find updated content data');
       }
       
       if (!updatedContent.audioUrl) {
-        console.error('❌ 中文音频URL不存在');
-        throw new Error('中文音频URL不存在，请先生成中文音频');
+        console.error('❌ Chinese audio URL does not exist');
+        throw new Error('Chinese audio URL does not exist, please generate Chinese audio first');
       }
       
-      // 启动进度条更新
+      // Start progress bar update
       const startTime = Date.now();
-      const estimatedDuration = 180000; // 预计3分钟（生成视频）
+      const estimatedDuration = 180000; // Estimated 3 minutes (video generation)
       
       progressInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
@@ -500,10 +518,21 @@ export function BookManagement() {
       
       setVideoProgressInterval(prev => ({ ...prev, [progressKey]: progressInterval! }));
       
+      // Pass custom cover image, edited summary, edited titles, and opening text option
+      const edited = editedSummaries[content.id];
+      const shouldIncludeOpening = includeOpeningText[content.id] !== false; // Default to true
       const videoResult = await bookAPI.generateVideo(
         updatedContent.id,
         updatedContent.audioUrl,
-        'zh'
+        'zh',
+        {
+          coverImageUrl: currentBlogCoverUrl,
+          summary: finalSummary,
+          summaryEn: edited?.summaryEn || content.summaryEn,
+          chapterTitle: edited?.chapterTitle || content.chapterTitle,
+          chapterTitleEn: edited?.chapterTitleEn || content.chapterTitleEn,
+          includeOpeningText: shouldIncludeOpening
+        }
       );
       
       if (progressInterval) {
@@ -521,9 +550,9 @@ export function BookManagement() {
         throw new Error('视频生成失败');
       }
     } catch (error: any) {
-      console.error('生成中文视频失败:', error);
+      console.error('Failed to generate Chinese video:', error);
       
-      // 特殊处理敏感内容错误
+      // Handle sensitive content errors
       let errorMessage = error.message || 'Failed to generate Chinese video';
       if (errorMessage.includes('敏感') || errorMessage.includes('sensitive')) {
         errorMessage = 'Video generation failed: Content may contain sensitive information. Please try modifying the text content and try again.';
@@ -1323,37 +1352,38 @@ export function BookManagement() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* 生成博客封面图区域 */}
+          {/* Blog Cover Image Section */}
           <div className="mb-6 p-4 border rounded-lg bg-accent/5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3">
               <div>
                 <h3 className="font-semibold mb-1">Blog Cover Image</h3>
                 <p className="text-sm text-muted-foreground">
-                  Generate a 9:16 book cover image based on book title and author
+                  Generate a 9:16 book cover image based on book title and author, or upload your own cover image
                 </p>
               </div>
+              <div className="flex gap-2 mt-3">
               <Button
                 onClick={async () => {
                   if (!selectedBook) return;
                   try {
-                    // 如果已有提示词（包括编辑过的），直接打开对话框
+                      // If prompts already exist (including edited), open dialog directly
                     if (editedPrompts || blogCoverPrompts) {
                       setIsPromptDialogOpen(true);
                       return;
                     }
                     
-                    // 否则先生成提示词
+                      // Otherwise generate prompts first
                     setIsPromptDialogOpen(true);
                     setGeneratingPrompts(true);
                     const promptsResult = await bookAPI.generateBlogCoverPrompts(selectedBook.id);
                     if (promptsResult && promptsResult.prompts) {
                       setBlogCoverPrompts(promptsResult.prompts);
-                      setEditedPrompts(null); // 重置编辑状态
+                        setEditedPrompts(null); // Reset edit state
                     } else {
                       throw new Error('Failed to generate prompts');
                     }
                   } catch (error: any) {
-                    console.error('生成提示词失败:', error);
+                      console.error('Failed to generate prompts:', error);
                     toast.error(error.message || 'Failed to generate prompts');
                     setIsPromptDialogOpen(false);
                   } finally {
@@ -1375,11 +1405,74 @@ export function BookManagement() {
                   </>
                 )}
               </Button>
+                <Button
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) return;
+                      
+                      try {
+                        setIsUploadingCover(true);
+                        // Upload cover image and save to Book object if book is selected
+                        const result = await videoAPI.uploadCover(
+                          file, 
+                          selectedBook?.id, // Pass bookId to save to Book object
+                          (progress) => {
+                            // Can display upload progress
+                          }
+                        );
+                        setUploadedCoverImage(result.url);
+                        setBlogCoverUrl(result.url);
+                        
+                        // Update selectedBook and books list with the new cover URL
+                        if (selectedBook) {
+                          setSelectedBook({
+                            ...selectedBook,
+                            blogCoverUrl: result.url
+                          });
+                          setBooks(prevBooks => 
+                            prevBooks.map(book => 
+                              book.id === selectedBook.id 
+                                ? { ...book, blogCoverUrl: result.url }
+                                : book
+                            )
+                          );
+                        }
+                        
+                        toast.success('Cover image uploaded and saved successfully!');
+                      } catch (error: any) {
+                        console.error('Failed to upload cover image:', error);
+                        toast.error(error.message || 'Failed to upload cover image');
+                      } finally {
+                        setIsUploadingCover(false);
+                      }
+                    };
+                    input.click();
+                  }}
+                  disabled={isUploadingCover}
+                  variant="outline"
+                >
+                  {isUploadingCover ? (
+                    <>
+                      <Loader className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Cover
+                  </>
+                )}
+              </Button>
             </div>
-            {(blogCoverUrl || selectedBook?.blogCoverUrl) && (
+            </div>
+            {(blogCoverUrl || selectedBook?.blogCoverUrl || uploadedCoverImage) && (
               <div className="mt-3">
                 <img 
-                  src={blogCoverUrl || selectedBook?.blogCoverUrl || ''} 
+                  src={uploadedCoverImage || blogCoverUrl || selectedBook?.blogCoverUrl || ''} 
                   alt="Blog Cover" 
                   className="w-full max-w-xs mx-auto rounded-lg border"
                 />
@@ -1391,10 +1484,10 @@ export function BookManagement() {
           <Dialog open={isPromptDialogOpen} onOpenChange={(open) => {
             setIsPromptDialogOpen(open);
             if (!open) {
-              // 关闭对话框时，如果没有选择风格，重置选择状态
-              // 但保留提示词和编辑状态，以便下次打开时继续使用
+              // When closing dialog, if no style is selected, reset selection state
+              // But keep prompts and edit state for next time
               if (!selectedPromptStyle) {
-                // 如果关闭时没有选择，保持提示词不变
+                // If no selection when closing, keep prompts unchanged
               }
             }
           }}>
@@ -1617,10 +1710,109 @@ export function BookManagement() {
                           {getVideoStatusIcon(content.videoStatus)}
                         </div>
                         <div className="mb-2 space-y-1">
-                          <h3 className="font-semibold">{content.chapterTitle}</h3>
-                          {content.chapterTitleEn && (
-                            <h4 className="text-sm text-muted-foreground font-medium">{content.chapterTitleEn}</h4>
-                          )}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-muted-foreground">Chinese Title:</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={async () => {
+                                  if (editingContentId === content.id) {
+                                    // Save edits
+                                    const edited = editedSummaries[content.id];
+                                    if (edited) {
+                                      try {
+                                        // Call API to save edited content
+                                        await bookAPI.updateContentSummary(
+                                          content.id, 
+                                          edited.summary, 
+                                          edited.summaryEn,
+                                          edited.chapterTitle,
+                                          edited.chapterTitleEn
+                                        );
+                                        setEditingContentId(null);
+                                        toast.success('Content updated successfully');
+                                        // Reload content to get latest data
+                                        if (selectedBook) {
+                                          await loadBookContents(selectedBook.id);
+                                        }
+                                      } catch (error: any) {
+                                        console.error('Failed to save content:', error);
+                                        toast.error(error.message || 'Failed to save content');
+                                      }
+                                    }
+                                  } else {
+                                    // Start editing
+                                    setEditingContentId(content.id);
+                                    setEditedSummaries({
+                                      ...editedSummaries,
+                                      [content.id]: {
+                                        summary: content.summary || '',
+                                        summaryEn: content.summaryEn || '',
+                                        chapterTitle: content.chapterTitle || '',
+                                        chapterTitleEn: content.chapterTitleEn || ''
+                                      }
+                                    });
+                                  }
+                                }}
+                              >
+                                {editingContentId === content.id ? (
+                                  <>
+                                    <CircleCheck className="mr-1 h-3 w-3" />
+                                    Save
+                                  </>
+                                ) : (
+                                  <>
+                                    <Edit className="mr-1 h-3 w-3" />
+                                    Edit
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                            {editingContentId === content.id ? (
+                              <Input
+                                value={editedSummaries[content.id]?.chapterTitle || content.chapterTitle || ''}
+                                onChange={(e) => {
+                                  setEditedSummaries({
+                                    ...editedSummaries,
+                                    [content.id]: {
+                                      ...editedSummaries[content.id],
+                                      chapterTitle: e.target.value
+                                    }
+                                  });
+                                }}
+                                className="mt-1"
+                                placeholder="Enter Chinese title..."
+                              />
+                            ) : (
+                              <h3 className="font-semibold">{editedSummaries[content.id]?.chapterTitle || content.chapterTitle}</h3>
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-muted-foreground">English Title:</span>
+                            </div>
+                            {editingContentId === content.id ? (
+                              <Input
+                                value={editedSummaries[content.id]?.chapterTitleEn || content.chapterTitleEn || ''}
+                                onChange={(e) => {
+                                  setEditedSummaries({
+                                    ...editedSummaries,
+                                    [content.id]: {
+                                      ...editedSummaries[content.id],
+                                      chapterTitleEn: e.target.value
+                                    }
+                                  });
+                                }}
+                                className="mt-1"
+                                placeholder="Enter English title..."
+                              />
+                            ) : (
+                              content.chapterTitleEn && (
+                                <h4 className="text-sm text-muted-foreground font-medium">{editedSummaries[content.id]?.chapterTitleEn || content.chapterTitleEn}</h4>
+                              )
+                            )}
+                          </div>
                         </div>
                         
                         {/* 视频标题区域 */}
@@ -1638,22 +1830,117 @@ export function BookManagement() {
                         
                         <div className="mb-4 space-y-3">
                           <div>
+                            <div className="flex items-center justify-between mb-1">
                             <span className="text-sm font-medium text-muted-foreground">Chinese Summary:</span>
-                            <p className="text-muted-foreground mt-1">{content.summary || 'No Chinese summary available'}</p>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={async () => {
+                                  if (editingContentId === content.id) {
+                                    // Save edits
+                                    const edited = editedSummaries[content.id];
+                                    if (edited) {
+                                      try {
+                                        // Call API to save edited content
+                                        await bookAPI.updateContentSummary(
+                                          content.id, 
+                                          edited.summary, 
+                                          edited.summaryEn,
+                                          edited.chapterTitle,
+                                          edited.chapterTitleEn
+                                        );
+                                        setEditingContentId(null);
+                                        toast.success('Content updated successfully');
+                                        // Reload content to get latest data
+                                        if (selectedBook) {
+                                          await loadBookContents(selectedBook.id);
+                                        }
+                                      } catch (error: any) {
+                                        console.error('Failed to save content:', error);
+                                        toast.error(error.message || 'Failed to save content');
+                                      }
+                                    }
+                                  } else {
+                                    // Start editing
+                                    setEditingContentId(content.id);
+                                    setEditedSummaries({
+                                      ...editedSummaries,
+                                      [content.id]: {
+                                        summary: content.summary || '',
+                                        summaryEn: content.summaryEn || '',
+                                        chapterTitle: content.chapterTitle || '',
+                                        chapterTitleEn: content.chapterTitleEn || ''
+                                      }
+                                    });
+                                  }
+                                }}
+                              >
+                                {editingContentId === content.id ? (
+                                  <>
+                                    <CircleCheck className="mr-1 h-3 w-3" />
+                                    Save
+                                  </>
+                                ) : (
+                                  <>
+                                    <Edit className="mr-1 h-3 w-3" />
+                                    Edit
+                                  </>
+                                )}
+                              </Button>
                         </div>
-                          {content.summaryEn && (
+                            {editingContentId === content.id ? (
+                              <Textarea
+                                value={editedSummaries[content.id]?.summary || content.summary || ''}
+                                onChange={(e) => {
+                                  setEditedSummaries({
+                                    ...editedSummaries,
+                                    [content.id]: {
+                                      ...editedSummaries[content.id],
+                                      summary: e.target.value
+                                    }
+                                  });
+                                }}
+                                className="mt-1 min-h-[100px]"
+                                placeholder="Enter Chinese summary..."
+                              />
+                            ) : (
+                              <p className="text-muted-foreground mt-1">
+                                {editedSummaries[content.id]?.summary || content.summary || 'No Chinese summary available'}
+                              </p>
+                            )}
+                          </div>
                             <div>
-                              <span className="text-sm font-medium text-muted-foreground">English Summary：</span>
-                              <p className="text-muted-foreground mt-1">{content.summaryEn}</p>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-muted-foreground">English Summary:</span>
                       </div>
-                          )}
+                            {editingContentId === content.id ? (
+                              <Textarea
+                                value={editedSummaries[content.id]?.summaryEn || content.summaryEn || ''}
+                                onChange={(e) => {
+                                  setEditedSummaries({
+                                    ...editedSummaries,
+                                    [content.id]: {
+                                      ...editedSummaries[content.id],
+                                      summaryEn: e.target.value
+                                    }
+                                  });
+                                }}
+                                className="mt-1 min-h-[100px]"
+                                placeholder="Enter English summary..."
+                              />
+                            ) : (
+                              <p className="text-muted-foreground mt-1">
+                                {editedSummaries[content.id]?.summaryEn || content.summaryEn || 'No English summary available'}
+                              </p>
+                            )}
+                          </div>
                     </div>
                       </div>
                     </div>
 
-                    {/* 生成中文视频和英文视频按钮 */}
+                    {/* Generate Chinese and English Video Buttons */}
                     <div className="space-y-4">
-                      {/* 生成中文视频按钮 */}
+                      {/* Generate Chinese Video Button */}
                       <div className="border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
@@ -1667,13 +1954,31 @@ export function BookManagement() {
                             ) : null}
                           </div>
                         </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Checkbox
+                            id={`opening-text-zh-${content.id}`}
+                            checked={includeOpeningText[content.id] !== false} // Default to true
+                            onCheckedChange={(checked) => {
+                              setIncludeOpeningText({
+                                ...includeOpeningText,
+                                [content.id]: checked !== false
+                              });
+                            }}
+                          />
+                          <Label 
+                            htmlFor={`opening-text-zh-${content.id}`}
+                            className="text-xs text-muted-foreground cursor-pointer"
+                          >
+                            Include opening text (e.g., "Welcome to our book blog")
+                          </Label>
+                        </div>
                         <Button 
                             onClick={() => handleGenerateChineseVideo(content)}
                             disabled={
                               (generatingVideoId === content.id && generatingVideoLanguage === 'zh') ||
                               (generatingAudioId === content.id && generatingAudioLanguage === 'zh') ||
                               generatingSilentVideoId === content.id ||
-                              !(blogCoverUrl || selectedBook?.blogCoverUrl)
+                              !(uploadedCoverImage || blogCoverUrl || selectedBook?.blogCoverUrl)
                             }
                             size="sm"
                             variant={content.videoUrl ? "outline" : "default"}
@@ -1691,13 +1996,13 @@ export function BookManagement() {
                               </>
                             )}
                         </Button>
-                        {/* 提示信息 */}
-                        {!(blogCoverUrl || selectedBook?.blogCoverUrl) && (
+                        {/* Hint Message */}
+                        {!(uploadedCoverImage || blogCoverUrl || selectedBook?.blogCoverUrl) && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Please generate blog cover image first
+                            Please generate or upload blog cover image first
                           </p>
                         )}
-                        {/* 进度条显示 */}
+                        {/* Progress Bar Display */}
                         {videoProgress[`${content.id}_zh_complete`] !== undefined && (
                           <div className="mt-2">
                             <Progress 
@@ -1723,6 +2028,24 @@ export function BookManagement() {
                               <Loader className="h-4 w-4 animate-spin text-accent" />
                             )}
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Checkbox
+                            id={`opening-text-en-${content.id}`}
+                            checked={includeOpeningText[`${content.id}_en`] !== false} // Default to true
+                            onCheckedChange={(checked) => {
+                              setIncludeOpeningText({
+                                ...includeOpeningText,
+                                [`${content.id}_en`]: checked !== false
+                              });
+                            }}
+                          />
+                          <Label 
+                            htmlFor={`opening-text-en-${content.id}`}
+                            className="text-xs text-muted-foreground cursor-pointer"
+                          >
+                            Include opening text (e.g., "Welcome to our book blog")
+                          </Label>
                         </div>
                         <Button 
                           onClick={async () => {
@@ -1761,12 +2084,16 @@ export function BookManagement() {
                                   toast.info('Step 1/2: Generating English audio...');
                                   setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 10 }));
                                   
+                                  // Use edited summary if available, otherwise use original
+                                  const edited = editedSummaries[content.id];
+                                  const finalSummaryEn = edited?.summaryEn || content.summaryEn || '';
+                                  
                                   // 检查是否有英文翻译
-                                  if (!content.chapterTitleEn && !content.summaryEn) {
+                                  if (!content.chapterTitleEn && !finalSummaryEn) {
                                     throw new Error('Please translate content first. English content is required to generate English audio.');
                                   }
                                   
-                                  const audioText = `${content.summaryEn || ''}`.trim();
+                                  const audioText = finalSummaryEn.trim();
                                   if (!audioText) {
                                     throw new Error('English content text is empty, cannot generate English audio');
                                   }
@@ -1799,8 +2126,12 @@ export function BookManagement() {
                                     toast.info('Detected temporary URL, regenerating audio...');
                                     setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 10 }));
                                     
-                                    const audioText = `${content.summaryEn || ''}`.trim();
-                                    const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en');
+                                    // Use edited summary if available
+                                    const edited = editedSummaries[content.id];
+                                    const audioText = `${edited?.summaryEn || content.summaryEn || ''}`.trim();
+                                    // Check if opening text should be included
+                                    const shouldIncludeOpeningEn = includeOpeningText[`${content.id}_en`] !== false; // Default to true
+                                    const audioResult = await bookAPI.generateAudio(content.id, audioText, 'en', shouldIncludeOpeningEn);
                                     if (!audioResult || !audioResult.audioUrl) {
                                       throw new Error('重新生成英文音频失败');
                                     }
@@ -1828,7 +2159,26 @@ export function BookManagement() {
                                 toast.info('Step 2/2: Generating English video with blog cover and microphone...');
                                 setEnglishVideoGeneratingProgress(prev => ({ ...prev, [content.id]: 40 }));
                                 
-                                const result = await bookAPI.generateVideo(content.id, finalAudioUrl, 'en');
+                                // Use edited cover, title, and summary if available
+                                const edited = editedSummaries[content.id];
+                                const currentBlogCoverUrl = uploadedCoverImage || blogCoverUrl || selectedBook?.blogCoverUrl;
+                                
+                                // Get opening text option for English video
+                                const shouldIncludeOpeningEn = includeOpeningText[`${content.id}_en`] !== false; // Default to true
+                                
+                                const result = await bookAPI.generateVideo(
+                                  content.id, 
+                                  finalAudioUrl, 
+                                  'en',
+                                  {
+                                    coverImageUrl: currentBlogCoverUrl,
+                                    summary: content.summary, // Chinese summary (not used for English video but kept for consistency)
+                                    summaryEn: edited?.summaryEn || content.summaryEn,
+                                    chapterTitle: content.chapterTitle, // Chinese title (not used for English video but kept for consistency)
+                                    chapterTitleEn: edited?.chapterTitleEn || content.chapterTitleEn,
+                                    includeOpeningText: shouldIncludeOpeningEn
+                                  }
+                                );
                                 if (progressInterval) {
                                   clearInterval(progressInterval);
                                 }

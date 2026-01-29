@@ -202,17 +202,38 @@ router.post('/admin/cover', upload.single('cover'), async (req, res) => {
     }
 
     const { originalname, buffer, mimetype } = req.file;
+    const { bookId } = req.body; // Optional: bookId to save cover image URL to Book object
 
     // 使用Master Key上传到LeanCloud存储
     AV.Cloud.useMasterKey();
     const avFile = new AV.File(originalname, buffer, mimetype);
     const uploadedFile = await avFile.save();
+    
+    const coverImageUrl = uploadedFile.url();
+    
+    // If bookId is provided, save the cover image URL to the Book object
+    if (bookId) {
+      try {
+        const Book = AV.Object.extend('Book');
+        const book = await new AV.Query('Book').get(bookId);
+        if (book) {
+          book.set('blogCoverUrl', coverImageUrl);
+          await book.save();
+          console.log(`✅ Cover image URL saved to Book object: bookId=${bookId}, url=${coverImageUrl}`);
+        } else {
+          console.warn(`⚠️ Book not found: bookId=${bookId}`);
+        }
+      } catch (bookError) {
+        console.error('❌ Failed to save cover image URL to Book object:', bookError);
+        // Don't fail the upload if saving to Book fails
+      }
+    }
 
     res.json({
       success: true,
       message: 'Cover image uploaded successfully',
       data: {
-        url: uploadedFile.url(),
+        url: coverImageUrl,
         filename: uploadedFile.name(),
         size: buffer.length
       }

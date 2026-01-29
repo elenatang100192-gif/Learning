@@ -145,11 +145,18 @@ Learning/
 
 ### 4. Image Generation
 
-**Service**: Doubao-Seedream-4-0 (ByteDance)
-- **Model ID**: `doubao-seedream-4-0-250828`
-- **API Endpoint**: `https://ark.cn-beijing.volces.com/api/v3/images/generations`
+**Service**: OpenAI DALL-E (Azure AI Foundry)
+- **Model**: DALL-E 3
+- **API Endpoint**: `https://[your-endpoint]/openai/deployments/[deployment-name]/images/generations?api-version=2024-02-15-preview`
+- **API Key**: `cfbf57ca067949419e00faba7441f21f`
+- **Documentation**: https://learn.microsoft.com/en-us/azure/ai-foundry/openai/reference-preview-latest?view=foundry-classic#create-transcription
 - **Use Case**: Generate cover images for videos
-- **Alternative**: Alibaba Cloud DashScope (通义万相)
+- **Configuration**: 
+  - Set `OPENAI_API_KEY` environment variable (default: `cfbf57ca067949419e00faba7441f21f`)
+  - Set `OPENAI_ENDPOINT` environment variable (e.g., `https://your-resource.openai.azure.com`)
+  - Set `OPENAI_DEPLOYMENT_NAME` environment variable (default: `dall-e-3`)
+  - Set `OPENAI_API_VERSION` environment variable (default: `2024-02-15-preview`)
+- **Previous Service**: Doubao-Seedream-4-0 (已替换)
 
 ### 5. Image-to-Video Generation
 
@@ -177,8 +184,8 @@ Learning/
    - Generate English audio
    ↓
 4. Cover Image Generation
-   - Option A: Generate from text (Doubao-Seedream)
-   - Option B: Use Alibaba Cloud DashScope
+   - Generate from text using OpenAI DALL-E 3 (Azure AI Foundry)
+   - Previous: Doubao-Seedream (已替换为 OpenAI DALL-E)
    ↓
 5. Video Generation
    - Option A: Text-to-Video (Doubao-Seedance)

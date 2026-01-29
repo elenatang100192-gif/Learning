@@ -18,6 +18,7 @@ export default defineConfig({
   },
   server: {
     port: 5175, // 后台管理界面使用5175端口
+    host: '0.0.0.0', // 允许局域网访问
   },
   cacheDir: process.env.VITE_CACHE_DIR || '/tmp/vite-cache-admin', // 使用临时目录避免权限问题
   optimizeDeps: {

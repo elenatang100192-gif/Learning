@@ -57,11 +57,56 @@ const DOUBAO_MODEL_ID = process.env.DOUBAO_MODEL_ID || 'doubao-seedance-1-5-pro-
 const DOUBAO_TEXT_TO_VIDEO_URL = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 const DOUBAO_TASK_STATUS_URL = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 
-// Doubao-Seedream-4-0 API配置（图片生成）
+// Doubao-Seedream-4-0 API配置（图片生成）- 已替换为 OpenAI DALL-E
 // 模型ID：doubao-seedream-4-0-250828
 // API端点：https://ark.cn-beijing.volces.com/api/v3/images/generations
 const DOUBAO_IMAGE_GEN_URL = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
 const DOUBAO_IMAGE_MODEL_ID = process.env.DOUBAO_IMAGE_MODEL_ID || 'doubao-seedream-4-0-250828';
+
+// OpenAI 图像生成 API配置 - Azure AI Foundry
+// 支持 DALL-E 3 和 GPT-image-1 系列模型
+// API Key: cfbf57ca067949419e00faba7441f21f
+// 文档: https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/dall-e?view=foundry-classic
+// 端点格式: https://[your-resource-name].openai.azure.com/openai/deployments/[deployment-name]/images/generations?api-version=[api-version]
+// API 版本：
+//   - DALL-E 3: 2024-02-01
+//   - GPT-image-1 系列: 2025-04-01-preview
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'cfbf57ca067949419e00faba7441f21f';
+const OPENAI_ENDPOINT = process.env.OPENAI_ENDPOINT || process.env.AZURE_OPENAI_ENDPOINT;
+const OPENAI_DEPLOYMENT_NAME = process.env.OPENAI_DEPLOYMENT_NAME || process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-image-1.5';
+// API 版本：GPT-image-1.5 使用 2025-04-01-preview，DALL-E 3 使用 2024-02-01
+const OPENAI_API_VERSION = process.env.OPENAI_API_VERSION || '2025-04-01-preview';
+
+// 构建 OpenAI 图像生成 API URL
+// 支持两种模式：
+// 1. Azure AI Foundry: https://[endpoint]/openai/deployments/[deployment]/images/generations?api-version=[version]
+// 2. 标准 OpenAI API: https://api.openai.com/v1/images/generations
+let OPENAI_IMAGE_GEN_URL;
+let OPENAI_USE_AZURE = false;
+let OPENAI_AUTH_HEADER = '';
+
+// 检查是否是 Azure AI Foundry 端点
+if (OPENAI_ENDPOINT && OPENAI_DEPLOYMENT_NAME && !OPENAI_ENDPOINT.includes('your-resource')) {
+  // Azure AI Foundry 模式
+  OPENAI_IMAGE_GEN_URL = `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT_NAME}/images/generations?api-version=${OPENAI_API_VERSION}`;
+  OPENAI_USE_AZURE = true;
+  OPENAI_AUTH_HEADER = 'api-key'; // Azure 使用 api-key header
+  console.log('✅ OpenAI DALL-E API 配置已加载 (Azure AI Foundry)，端点:', OPENAI_IMAGE_GEN_URL);
+} else if (OPENAI_ENDPOINT && OPENAI_ENDPOINT.includes('your-resource')) {
+  // 占位符端点，提示用户配置
+  console.error('❌ OpenAI 端点未正确配置！');
+  console.error('   请在 .env 文件中设置正确的 OPENAI_ENDPOINT');
+  console.error('   格式: OPENAI_ENDPOINT=https://your-resource.openai.azure.com');
+  console.error('   如何查找端点：登录 Azure 门户 -> Azure AI Foundry -> 您的资源 -> 概览 -> 端点');
+  OPENAI_IMAGE_GEN_URL = null;
+} else {
+  // 尝试使用标准 OpenAI API（如果 API key 是标准的 OpenAI key）
+  OPENAI_IMAGE_GEN_URL = 'https://api.openai.com/v1/images/generations';
+  OPENAI_USE_AZURE = false;
+  OPENAI_AUTH_HEADER = 'Authorization'; // 标准 OpenAI 使用 Authorization header
+  console.warn('⚠️ 未配置 Azure AI Foundry 端点，尝试使用标准 OpenAI API');
+  console.warn('   如果您的 API key 是 Azure AI Foundry 的，请在 .env 文件中设置 OPENAI_ENDPOINT');
+}
 
 // 注意：已完全移除豆包TTS相关代码，只使用腾讯云TTS
 // 以下变量定义保留仅用于兼容性，但不会被使用
@@ -779,12 +824,13 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
       console.log('📝 使用默认提示词:', prompt);
     }
     
-    // 调用Doubao图片生成API（增加超时时间到60秒）
+    // Call Doubao Seedream image generation API (timeout set to 60 seconds)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
     
     let imageGenResponse;
     try {
+      console.log('🎨 Calling Doubao Seedream API to generate image, endpoint:', DOUBAO_IMAGE_GEN_URL);
       imageGenResponse = await fetch(DOUBAO_IMAGE_GEN_URL, {
         method: 'POST',
         headers: {
@@ -796,7 +842,7 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
           prompt: prompt,
           sequential_image_generation: 'disabled',
           response_format: 'url',
-          size: '2K', // 2K分辨率
+          size: '2K', // 2K resolution
           stream: false,
           watermark: true
         }),
@@ -806,43 +852,43 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
     } catch (error) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        console.error('❌ Doubao图片生成API请求超时（60秒）');
-        throw new Error('图片生成请求超时，请稍后重试');
+        console.error('❌ Doubao image generation API request timeout (60 seconds)');
+        throw new Error('Image generation request timeout, please try again later');
       }
       if (error.cause && error.cause.code === 'UND_ERR_CONNECT_TIMEOUT') {
-        console.error('❌ Doubao图片生成API连接超时:', error.message);
-        throw new Error('无法连接到图片生成服务，请检查网络连接或稍后重试');
+        console.error('❌ Doubao image generation API connection timeout:', error.message);
+        throw new Error('Unable to connect to image generation service, please check network connection or try again later');
       }
-      console.error('❌ Doubao图片生成API请求失败:', error.message);
+      console.error('❌ Doubao image generation API request failed:', error.message);
       throw error;
     }
     
     if (!imageGenResponse.ok) {
       const errorText = await imageGenResponse.text();
-      console.error('❌ Doubao图片生成API失败:', imageGenResponse.status, errorText);
-      throw new Error(`Doubao图片生成API失败: ${imageGenResponse.status} ${imageGenResponse.statusText} - ${errorText}`);
+      console.error('❌ Doubao image generation API failed:', imageGenResponse.status, errorText);
+      throw new Error(`Doubao image generation API failed: ${imageGenResponse.status} ${imageGenResponse.statusText} - ${errorText}`);
     }
     
     const imageGenData = await imageGenResponse.json();
-    console.log('✅ Doubao图片生成API响应:', JSON.stringify(imageGenData, null, 2));
+    console.log('✅ Doubao image generation API response:', JSON.stringify(imageGenData, null, 2));
     
-    // 检查响应格式
+    // Check response format (Doubao returns: { data: [{ url: "..." }] })
     if (!imageGenData.data || !Array.isArray(imageGenData.data) || imageGenData.data.length === 0) {
-      console.error('❌ Doubao图片生成响应格式错误:', JSON.stringify(imageGenData, null, 2));
-      throw new Error('Doubao图片生成响应格式错误，未找到图片URL');
+      console.error('❌ Doubao image generation response format error:', JSON.stringify(imageGenData, null, 2));
+      throw new Error('Doubao image generation response format error, image URL not found');
     }
     
     const imageUrl = imageGenData.data[0].url;
     if (!imageUrl) {
-      console.error('❌ Doubao图片生成响应格式错误，未找到URL字段:', JSON.stringify(imageGenData, null, 2));
-      throw new Error('Doubao图片生成响应格式错误，未找到图片URL');
+      console.error('❌ Doubao image generation response format error, URL field not found:', JSON.stringify(imageGenData, null, 2));
+      throw new Error('Doubao image generation response format error, image URL not found');
     }
     
-    console.log('✅ 图片生成成功，URL:', imageUrl);
+    console.log('✅ Image generated successfully, URL:', imageUrl);
     
-    // 下载图片并上传到LeanCloud（增加超时时间到30秒）
+    // Download image and upload to LeanCloud (timeout set to 30 seconds)
     const downloadController = new AbortController();
-    const downloadTimeoutId = setTimeout(() => downloadController.abort(), 30000); // 30秒超时
+    const downloadTimeoutId = setTimeout(() => downloadController.abort(), 30000); // 30 second timeout
     
     let imageResponse;
     try {
@@ -853,15 +899,15 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
     } catch (error) {
       clearTimeout(downloadTimeoutId);
       if (error.name === 'AbortError') {
-        console.error('❌ 下载图片超时（30秒）');
-        throw new Error('下载生成的图片超时，请稍后重试');
+        console.error('❌ Download image timeout (30 seconds)');
+        throw new Error('Download generated image timeout, please try again later');
       }
-      console.error('❌ 下载图片失败:', error.message);
-      throw new Error(`下载生成的图片失败: ${error.message}`);
+      console.error('❌ Download image failed:', error.message);
+      throw new Error(`Download generated image failed: ${error.message}`);
     }
     
     if (!imageResponse.ok) {
-      throw new Error(`下载生成的图片失败: ${imageResponse.statusText}`);
+      throw new Error(`Download generated image failed: ${imageResponse.statusText}`);
     }
     
     const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
@@ -869,7 +915,7 @@ router.post('/:bookId/generate-blog-cover', async (req, res) => {
     const uploadedFile = await imageFile.save();
     
     const finalImageUrl = uploadedFile.url();
-    console.log('✅ 图片上传到LeanCloud成功，URL:', finalImageUrl);
+    console.log('✅ Image uploaded to LeanCloud successfully, URL:', finalImageUrl);
     
     // 保存到书籍对象
     book.set('blogCoverUrl', finalImageUrl);
@@ -1445,7 +1491,7 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
   
   try {
     const { contentId } = req.params;
-    const { text, language = 'zh' } = req.body; // language: 'zh' 或 'en'
+    const { text, language = 'zh', includeOpeningText = true } = req.body; // language: 'zh' 或 'en', includeOpeningText: 是否包含开头语（默认true）
     
     // 根据language参数判断是否是英文
     const isEnglish = language === 'en';
@@ -1534,10 +1580,12 @@ router.post('/content/:contentId/generate-audio', async (req, res) => {
       }
     }
     
-    // 在文本前添加开场白
-    const finalText = openingText ? `${openingText}${text}` : text;
-    console.log(`📝 添加开场白，集数: ${segmentIndex}/${totalSegments}, 语言: ${language}`);
-    console.log(`📝 开场白: ${openingText}`);
+    // 根据用户选择决定是否添加开场白
+    const finalText = (includeOpeningText && openingText) ? `${openingText}${text}` : text;
+    console.log(`📝 添加开场白选项: ${includeOpeningText ? '是' : '否'}, 集数: ${segmentIndex}/${totalSegments}, 语言: ${language}`);
+    if (includeOpeningText && openingText) {
+      console.log(`📝 开场白: ${openingText}`);
+    }
     console.log(`📝 最终文本长度: ${finalText.length} 字符`);
 
     // 统一使用腾讯云长文本语音合成（精品模型-大模型音色）
@@ -3597,6 +3645,9 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   
+  // 获取请求参数
+  const { audioUrl, language = 'zh', coverImageUrl, summary, summaryEn, chapterTitle, chapterTitleEn, includeOpeningText = true } = req.body;
+  
   // 检测前端是否支持SSE（通过Accept头或useSSE参数）
   const acceptHeader = req.headers.accept || '';
   const useSSE = req.query.useSSE === 'true' || req.body.useSSE === true || acceptHeader.includes('text/event-stream');
@@ -3736,19 +3787,39 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       });
     }
     
+    // Use custom cover image if provided, otherwise use book's blog cover image
     const blogCoverUrl = book.get('blogCoverUrl');
-    if (!blogCoverUrl) {
+    if (!coverImageUrl && !blogCoverUrl) {
       return res.status(400).json({
         success: false,
-        message: '请先生成博客封面图'
+        message: 'Please generate blog cover image or upload cover image first'
       });
     }
+    
+    // If custom summary/title is provided, use it for video generation (optional, not saved to database)
+    if (summary) {
+      console.log('📝 Using custom Chinese summary:', summary.substring(0, 50) + '...');
+      // Note: This is not saved to database, only used for video generation
+    }
+    if (summaryEn) {
+      console.log('📝 Using custom English summary:', summaryEn.substring(0, 50) + '...');
+    }
+    if (chapterTitle) {
+      console.log('📝 Using custom Chinese title:', chapterTitle);
+      // Temporarily update contentObj for video generation
+      contentObj.set('chapterTitle', chapterTitle);
+    }
+    if (chapterTitleEn) {
+      console.log('📝 Using custom English title:', chapterTitleEn);
+      // Temporarily update contentObj for video generation
+      contentObj.set('chapterTitleEn', chapterTitleEn);
+    }
 
-    // 更新状态为生成中
+    // Update status to generating
     contentObj.set('videoStatus', 'generating');
     await contentObj.save();
 
-    console.log(`📝 开始生成${language === 'zh' ? '中文' : '英文'}视频（使用博客封面图）`);
+    console.log(`📝 Starting ${language === 'zh' ? 'Chinese' : 'English'} video generation (using blog cover image)`);
     sendProgress('Step 1: Downloading audio file', 10);
 
     const tempDir = os.tmpdir();
@@ -3909,13 +3980,19 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
       sendProgress('Step 1: Subtitle generation failed, continuing without subtitles', 40);
     }
     
-    // 下载博客封面图
-    console.log('📥 开始下载博客封面图:', blogCoverUrl);
+    // Use custom cover image if provided, otherwise use book's blog cover image
+    const finalCoverImageUrl = coverImageUrl || blogCoverUrl;
+    if (!finalCoverImageUrl) {
+      throw new Error('Cover image URL does not exist, please provide cover image or generate blog cover image');
+    }
+    
+    // Download blog cover image
+    console.log('📥 Starting to download blog cover image:', finalCoverImageUrl);
     let coverImageResponse;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
-      coverImageResponse = await fetch(blogCoverUrl, {
+      coverImageResponse = await fetch(finalCoverImageUrl, {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -3934,7 +4011,7 @@ router.post('/content/:contentId/generate-video', async (req, res) => {
     const coverImageBuffer = Buffer.from(await coverImageResponse.arrayBuffer());
     const coverImagePath = path.join(tempDir, `cover_${contentId}_${timestamp}.jpg`);
     await fs.writeFile(coverImagePath, coverImageBuffer);
-    console.log('✅ 博客封面图保存完成');
+    console.log('✅ Blog cover image saved successfully');
     sendProgress('Step 2: Cover image downloaded', 50);
     
     // 视频参数（9:16比例，720x1280）
@@ -4907,6 +4984,66 @@ router.post('/content/:contentId/generate-avatar', async (req, res) => {
   }
 });
 
+// Update content summary and titles (using Master Key to bypass ACL)
+router.post('/content/:contentId/update-summary', async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const { summary, summaryEn, chapterTitle, chapterTitleEn } = req.body;
+    
+    if (!summary && !chapterTitle) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one field (summary or chapterTitle) must be provided'
+      });
+    }
+    
+    // Get content object
+    const contentObj = await new AV.Query('ExtractedContent').get(contentId);
+    if (!contentObj) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found'
+      });
+    }
+    
+    // Update fields
+    AV.Cloud.useMasterKey();
+    if (summary !== undefined) {
+      contentObj.set('summary', summary);
+    }
+    if (summaryEn !== undefined) {
+      contentObj.set('summaryEn', summaryEn);
+    }
+    if (chapterTitle !== undefined) {
+      contentObj.set('chapterTitle', chapterTitle);
+    }
+    if (chapterTitleEn !== undefined) {
+      contentObj.set('chapterTitleEn', chapterTitleEn);
+    }
+    await contentObj.save();
+    
+    console.log(`✅ Content updated: contentId=${contentId}`);
+    
+    res.json({
+      success: true,
+      message: 'Content updated successfully',
+      data: {
+        summary: contentObj.get('summary'),
+        summaryEn: contentObj.get('summaryEn'),
+        chapterTitle: contentObj.get('chapterTitle'),
+        chapterTitleEn: contentObj.get('chapterTitleEn')
+      }
+    });
+  } catch (error) {
+    console.error('Failed to update content:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update content',
+      error: error.message
+    });
+  }
+});
+
 // 为已有内容生成英文翻译（使用Master Key绕过ACL）
 // 注意：这个路由必须在 /:bookId/contents 之前定义，避免路由冲突
 router.post('/content/:contentId/translate', async (req, res) => {
@@ -5120,34 +5257,60 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       });
     }
     
+    // Get request parameters (cover image, titles, summaries, opening text option)
+    const { coverImageUrl, chapterTitle, chapterTitleEn, summary, summaryEn, includeOpeningText = true } = req.body;
+    
+    // Use custom cover image if provided, otherwise use book's blog cover image
     const blogCoverUrl = book.get('blogCoverUrl');
-    if (!blogCoverUrl) {
+    const finalCoverImageUrl = coverImageUrl || blogCoverUrl;
+    if (!finalCoverImageUrl) {
       return res.status(400).json({
         success: false,
-        message: '请先生成博客封面图'
+        message: 'Please generate blog cover image or upload cover image first'
       });
     }
     
-    // 获取中文内容
-    const chapterTitle = contentObj.get('chapterTitle') || '';
-    const summary = contentObj.get('summary') || '';
+    // Use custom titles/summaries if provided, otherwise get from database
+    let finalChapterTitle = chapterTitle !== undefined ? chapterTitle : (contentObj.get('chapterTitle') || '');
+    let finalChapterTitleEn = chapterTitleEn !== undefined ? chapterTitleEn : (contentObj.get('chapterTitleEn') || '');
+    let finalSummary = summary !== undefined ? summary : (contentObj.get('summary') || '');
+    let finalSummaryEn = summaryEn !== undefined ? summaryEn : (contentObj.get('summaryEn') || '');
     
-    // 获取或翻译英文内容
-    let chapterTitleEn = contentObj.get('chapterTitleEn') || '';
-    let summaryEn = contentObj.get('summaryEn') || '';
+    // Log custom values if provided
+    if (coverImageUrl) {
+      console.log('📝 Using custom cover image:', coverImageUrl.substring(0, 50) + '...');
+    }
+    if (chapterTitleEn !== undefined) {
+      console.log('📝 Using custom English title:', finalChapterTitleEn);
+      // Temporarily update contentObj for video generation
+      contentObj.set('chapterTitleEn', finalChapterTitleEn);
+    }
+    if (summaryEn !== undefined) {
+      console.log('📝 Using custom English summary:', finalSummaryEn.substring(0, 50) + '...');
+      // Temporarily update contentObj for video generation
+      contentObj.set('summaryEn', finalSummaryEn);
+    }
+    
+    // 获取中文内容（如果未提供自定义值）
+    const chapterTitleDb = contentObj.get('chapterTitle') || '';
+    const summaryDb = contentObj.get('summary') || '';
+    
+    // 获取或翻译英文内容（如果未提供自定义值）
+    let chapterTitleEnDb = contentObj.get('chapterTitleEn') || '';
+    let summaryEnDb = contentObj.get('summaryEn') || '';
     
     console.log('📋 检查英文翻译状态...');
-    console.log('   标题:', chapterTitleEn ? '已有' : '需要翻译');
-    console.log('   摘要:', summaryEn ? '已有' : '需要翻译');
+    console.log('   标题:', finalChapterTitleEn ? '已有' : '需要翻译');
+    console.log('   摘要:', finalSummaryEn ? '已有' : '需要翻译');
     
     // 如果缺少英文翻译，使用Deepseek翻译
-    if (!chapterTitleEn || !summaryEn) {
+    if (!finalChapterTitleEn || !finalSummaryEn) {
       console.log('🌐 开始使用Deepseek翻译内容...');
       sendProgress('Step 1: Translating content to English', 10);
       
       // 翻译标题
-      if (!chapterTitleEn && chapterTitle) {
-        console.log(`🌐 [翻译] 章节标题: ${chapterTitle}`);
+      if (!finalChapterTitleEn && finalChapterTitle) {
+        console.log(`🌐 [翻译] 章节标题: ${finalChapterTitle}`);
         try {
           const translateTitleResponse = await fetch(DEEPSEEK_API_URL, {
             method: 'POST',
@@ -5160,7 +5323,7 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
               messages: [
                 {
                   role: 'user',
-                  content: `请将以下中文章节标题翻译成英文，只返回英文翻译，不要添加任何其他内容：\n${chapterTitle}`
+                  content: `请将以下中文章节标题翻译成英文，只返回英文翻译，不要添加任何其他内容：\n${finalChapterTitle}`
                 }
               ],
               temperature: 0.3,
@@ -5170,9 +5333,11 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
           
           if (translateTitleResponse.ok) {
             const translateTitleData = await translateTitleResponse.json();
-            chapterTitleEn = translateTitleData.choices[0]?.message?.content?.trim() || '';
-            if (chapterTitleEn) {
-              console.log(`✅ [翻译完成] 标题: ${chapterTitleEn}`);
+            finalChapterTitleEn = translateTitleData.choices[0]?.message?.content?.trim() || '';
+            if (finalChapterTitleEn) {
+              console.log(`✅ [翻译完成] 标题: ${finalChapterTitleEn}`);
+              // Update contentObj for video generation
+              contentObj.set('chapterTitleEn', finalChapterTitleEn);
             }
           }
         } catch (error) {
@@ -5272,15 +5437,17 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
       openingTextEn = middleOpeningsEn[segmentIndexEn % middleOpeningsEn.length];
     }
     
-    // 在文本前添加开场白（强制添加开场白）
-    let audioText = `${summaryEn}`.trim();
-    // 强制添加开场白，不管文本是否已经包含
-    if (openingTextEn && openingTextEn.trim()) {
+    // 根据用户选择决定是否添加开场白
+    let audioText = `${finalSummaryEn}`.trim();
+    // 根据 includeOpeningText 选项决定是否添加开场白
+    if (includeOpeningText && openingTextEn && openingTextEn.trim()) {
       audioText = `${openingTextEn.trim()}${audioText}`;
     }
     const finalAudioText = audioText;
-    console.log(`📝 添加英文开场白，集数: ${segmentIndexEn}/${totalSegmentsEn}`);
-    console.log(`📝 开场白: ${openingTextEn}`);
+    console.log(`📝 添加英文开场白选项: ${includeOpeningText ? '是' : '否'}, 集数: ${segmentIndexEn}/${totalSegmentsEn}`);
+    if (includeOpeningText && openingTextEn) {
+      console.log(`📝 开场白: ${openingTextEn}`);
+    }
     console.log('📝 英文文本:', finalAudioText.substring(0, 100) + '...');
     console.log('📝 文本长度:', finalAudioText.length, '字符');
     
@@ -5536,12 +5703,12 @@ router.post('/content/:contentId/generate-english-video', async (req, res) => {
     }
     
     // 下载博客封面图
-    console.log('📥 开始下载博客封面图:', blogCoverUrl);
+    console.log('📥 Starting to download blog cover image:', finalCoverImageUrl);
     let coverImageResponse;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
-      coverImageResponse = await fetch(blogCoverUrl, {
+      coverImageResponse = await fetch(finalCoverImageUrl, {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'

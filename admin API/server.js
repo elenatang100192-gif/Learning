@@ -70,6 +70,17 @@ app.use(cors({
       return;
     }
     
+    // 开发环境：允许所有本地IP地址访问（支持局域网访问）
+    if (process.env.NODE_ENV !== 'production') {
+      // 匹配 http://IP:端口 格式（如 http://10.146.246.125:5176）
+      const localIPPattern = /^http:\/\/(\d{1,3}\.){3}\d{1,3}:\d+$/;
+      if (localIPPattern.test(origin)) {
+        console.log(`✅ CORS: Allowing local IP origin: ${origin}`);
+        callback(null, true);
+        return;
+      }
+    }
+    
     // 允许所有 CloudBase 静态网站托管域名（无论生产环境还是开发环境）
     // 注意：origin只包含协议和域名，不包含路径
     if (origin && origin.includes('.tcloudbaseapp.com')) {

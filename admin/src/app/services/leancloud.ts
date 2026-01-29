@@ -523,17 +523,17 @@ export const bookAPI = {
   },
 
   // 生成音频（支持中英文）
-  async generateAudio(contentId: string, text: string, language: 'zh' | 'en' = 'zh') {
+  async generateAudio(contentId: string, text: string, language: 'zh' | 'en' = 'zh', includeOpeningText: boolean = true) {
     try {
-      console.log(`📞 调用生成音频API: contentId=${contentId}, language=${language}, textLength=${text.length}`);
+      console.log(`📞 Calling generate audio API: contentId=${contentId}, language=${language}, textLength=${text.length}, includeOpeningText=${includeOpeningText}`);
       const response = await apiRequest(`/books/content/${contentId}/generate-audio`, {
         method: 'POST',
-        body: JSON.stringify({ text, language }),
+        body: JSON.stringify({ text, language, includeOpeningText }),
       });
-      console.log(`✅ 生成音频API响应:`, response);
+      console.log(`✅ Generate audio API response:`, response);
       return response.success ? response.data : null;
     } catch (error: any) {
-      console.error(`❌ 生成音频API调用失败:`, error);
+      console.error(`❌ Generate audio API call failed:`, error);
       throw error;
     }
   },
@@ -590,12 +590,33 @@ export const bookAPI = {
   },
 
   // 生成视频（步骤3：将无声视频与音频合并）
-  async generateVideo(contentId: string, audioUrl: string, language: 'zh' | 'en' = 'zh') {
+  async generateVideo(
+    contentId: string, 
+    audioUrl: string, 
+    language: 'zh' | 'en' = 'zh',
+    options?: {
+      coverImageUrl?: string;
+      summary?: string;
+      summaryEn?: string;
+      chapterTitle?: string;
+      chapterTitleEn?: string;
+      includeOpeningText?: boolean;
+    }
+  ) {
     try {
-      console.log(`📞 调用生成视频API: contentId=${contentId}, language=${language}`);
+      console.log(`📞 Calling generate video API: contentId=${contentId}, language=${language}`, options);
       const response = await apiRequest(`/books/content/${contentId}/generate-video`, {
         method: 'POST',
-        body: JSON.stringify({ audioUrl, language }),
+        body: JSON.stringify({ 
+          audioUrl, 
+          language,
+          coverImageUrl: options?.coverImageUrl,
+          summary: options?.summary,
+          summaryEn: options?.summaryEn,
+          chapterTitle: options?.chapterTitle,
+          chapterTitleEn: options?.chapterTitleEn,
+          includeOpeningText: options?.includeOpeningText
+        }),
       });
       console.log(`✅ 生成视频API响应:`, response);
       return response.success ? response.data : null;
@@ -616,6 +637,22 @@ export const bookAPI = {
       return response.success ? response.data : null;
     } catch (error: any) {
       console.error(`❌ 生成翻译API调用失败:`, error);
+      throw error;
+    }
+  },
+
+  // 更新内容摘要
+  async updateContentSummary(contentId: string, summary: string, summaryEn?: string, chapterTitle?: string, chapterTitleEn?: string) {
+    try {
+      console.log(`📞 Calling update content API: contentId=${contentId}`);
+      const response = await apiRequest(`/books/content/${contentId}/update-summary`, {
+        method: 'POST',
+        body: JSON.stringify({ summary, summaryEn, chapterTitle, chapterTitleEn }),
+      });
+      console.log(`✅ Update content API response:`, response);
+      return response.success ? response.data : null;
+    } catch (error: any) {
+      console.error(`❌ Update content API call failed:`, error);
       throw error;
     }
   },
@@ -906,9 +943,12 @@ export const videoAPI = {
   },
 
   // 上传封面图片（带进度条）
-  async uploadCover(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; filename: string; size: number }> {
+  async uploadCover(file: File, bookId?: string, onProgress?: (progress: number) => void): Promise<{ url: string; filename: string; size: number }> {
     const formData = new FormData();
     formData.append('cover', file);
+    if (bookId) {
+      formData.append('bookId', bookId);
+    }
 
     const token = localStorage.getItem('sessionToken');
     
